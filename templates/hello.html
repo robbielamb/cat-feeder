@@ -1,3 +1,9 @@
-Hello, {{ name }}!
-I've been called {{ clickCount }} times.
-There have been {{ loopCount}} loops of the other task.
+{% extends "layout.html" %}
+
+{% block title %}Index{% endblock %}
+
+{% block content %}
+<p>Hello, {{ name }}!</p>
+<p>I've been called {{ click_count }} times.</p>
+<p>There have been {{ loop_count}} loops of the other task.</p>
+{% endblock %}
