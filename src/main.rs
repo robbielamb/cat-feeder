@@ -4,12 +4,12 @@ use askama::Template;
 
 use tokio::task;
 //use tokio::time;
-use tokio::fs::File;
-use tokio::io::AsyncReadExt;
-use tokio::sync::Mutex;
+/* use tokio::fs::File;
+use tokio::io::AsyncReadExt; */
+use tokio::sync::{mpsc, Mutex};
 use tokio::time::delay_for;
 
-use futures_util::future::join;
+use futures_util::future::join3;
 
 use std::time::Duration;
 
@@ -22,7 +22,6 @@ use std::sync::{
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Result, Server, StatusCode};
 
-static NOTFOUND: &[u8] = b"Not Found";
 
 #[derive(Template)]
 #[template(path = "hello.html")]
@@ -46,38 +45,68 @@ impl Shared {
     }
 }
 
+enum Event {
+    IncClick,
+    IncLoop
+}
+
+/// Shorthand for the transmit half of the message channel.
+type Tx = mpsc::UnboundedSender<Event>;
+
+/// Shorthand for the receive half of the message channel.
+type Rx = mpsc::UnboundedReceiver<Event>;
+
+
 #[tokio::main]
 async fn main() {
     //pretty_env_logger::init();
 
     let addr = "0.0.0.0:1337".parse().unwrap();
 
+    let (mut tx, mut rx) = mpsc::unbounded_channel::<Event>();
+
+    let tx = Arc::new(Mutex::new(tx));
+
     // For the most basic of state, we just share a counter, that increments
     // with each request, and we send its value back in the response.
     let state = Arc::new(Mutex::new(Shared::new()));
 
+    let reducer_state = Arc::clone(&state);
+    let reducer_task = task::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            //let state = state.lock().await;
+            reducer(event, &reducer_state).await
+        }
+    });
+
+    let service_tx = Arc::clone(&tx);
     let clone_state = Arc::clone(&state);
     let make_service = make_service_fn(move |_| {
         let clone_state = Arc::clone(&clone_state);
+        let service_tx = Arc::clone(&service_tx);
         async move {
             Ok::<_, hyper::Error>(service_fn(move |request: Request<Body>| {
                 //let count = counter.fetch_add(1, Ordering::AcqRel);
 
                 let state = Arc::clone(&clone_state);
-
-                response_function(request, state)
+                let tx = Arc::clone(&service_tx);
+                response_function(request, state, tx)
             }))
         }
     });
 
     let server = Server::bind(&addr).serve(make_service);
 
+    let my_task_tx = Arc::clone(&tx);
     let my_task = task::spawn(async move {
-        let state = Arc::clone(&state);
+        //let state = Arc::clone(&state);
         loop {
             {
-                let mut state = state.lock().await;
-                state.loop_count += 1;
+                if let Err(_err) = my_task_tx.lock().await.send(Event::IncLoop) {
+                    println!("Error sending message");
+                }
+                let state = state.lock().await;
+                //state.loop_count += 1;
                 println!("In the spawned loop {} times", state.loop_count);
             }
             delay_for(Duration::from_secs(5)).await;
@@ -91,16 +120,21 @@ async fn main() {
         eprintln!("server error: {}", e);
     } */
 
-    let _ret = join(my_task, server).await;
+    let _ret = join3(reducer_task, my_task, server).await;
 }
 
 async fn response_function(
     req: Request<Body>,
     state: Arc<Mutex<Shared>>,
+    tx: Arc<Mutex<Tx>>
 ) -> Result<Response<Body>> {
-    let state = Arc::clone(&state);
-    let mut state = state.lock().await;
-    state.click_count += 1;
+    //let state = Arc::clone(&state);
+    if let Err(_err) = tx.lock().await.send(Event::IncClick) {
+        println!("Error sending message");
+    }
+
+    let state = state.lock().await;
+    //state.click_count += 1;
 
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/") => {
@@ -131,4 +165,17 @@ fn not_found() -> Response<Body> {
         .status(StatusCode::NOT_FOUND)
         .body(body)
         .unwrap()
+}
+
+
+async fn reducer(event: Event, state: &Mutex<Shared>)  {
+    match event {
+        Event::IncLoop => {
+            state.lock().await.loop_count += 1;
+        }
+        Event::IncClick => {
+            state.lock().await.click_count += 1;
+        }
+    };
+    
 }
