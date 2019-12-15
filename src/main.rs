@@ -119,7 +119,7 @@ async fn response_function(
             if let Ok(mut file) = tokio::fs::File::open("favicon.ico").await {
                 let mut buf = Vec::new();
                 if let Ok(_) = file.read_to_end(&mut buf).await {
-                    return Ok(Response::new(buf.into()));
+                    return Ok(Response::builder().body(buf.into()).unwrap());                    
                 }
             }
             Ok(not_found())
