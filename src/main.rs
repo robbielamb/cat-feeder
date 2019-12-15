@@ -2,6 +2,9 @@
 /// and hyper.rs
 use askama::Template;
 
+//#[macro_use] extern crate log;
+use log::{debug, info, warn};
+
 use tokio::task;
 //use tokio::time;
 use tokio::fs::File;
@@ -13,10 +16,7 @@ use futures_util::future::join;
 
 use std::time::Duration;
 
-use std::sync::{
-    //atomic::{AtomicUsize, Ordering},
-    Arc,
-};
+use std::sync::Arc;
 
 //se hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
@@ -48,8 +48,9 @@ impl Shared {
 
 #[tokio::main]
 async fn main() {
-    //pretty_env_logger::init();
-
+    pretty_env_logger::init();
+    info!("Logging");
+    warn!("Warning");
     let addr = "0.0.0.0:1337".parse().unwrap();
 
     // For the most basic of state, we just share a counter, that increments
@@ -78,18 +79,13 @@ async fn main() {
             {
                 let mut state = state.lock().await;
                 state.loop_count += 1;
-                println!("In the spawned loop {} times", state.loop_count);
+                info!("In the spawned loop {} times", state.loop_count);
             }
             delay_for(Duration::from_secs(5)).await;
         }
     });
 
-    println!("Starting Server");
-
-    /*  let result = join.await;
-    if let Err(e) = server.await {
-        eprintln!("server error: {}", e);
-    } */
+    info!("Starting Server");
 
     let _ret = join(my_task, server).await;
 }
@@ -104,6 +100,8 @@ async fn response_function(
 
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/") => {
+            let headers = req.headers();
+            debug!("Headers are {:?}", headers);
             let hello = HelloTemplate {
                 name: "hey there",
                 click_count: &state.click_count,
@@ -111,15 +109,29 @@ async fn response_function(
             };
             let template = hello.render().unwrap();
             Ok(Response::builder()
+                .header("content-language", "en-US")
+                .header("content-type", "text/html; charset=utf-8")
                 .status(StatusCode::OK)
                 .body(Body::from(template))
                 .unwrap())
         }
+        (&Method::GET, "/favicon.ico") => {
+            if let Ok(mut file) = tokio::fs::File::open("favicon.ico").await {
+                let mut buf = Vec::new();
+                if let Ok(_) = file.read_to_end(&mut buf).await {
+                    return Ok(Response::new(buf.into()));
+                }
+            }
+            Ok(not_found())
+        }
         (&Method::POST, "/take_picture") => {
             let body = req.body();
-            
-            Ok(Response::builder().status(StatusCode::MOVED_PERMANENTLY)
-        .header("Location", "/get_image/1").body(Body::from("Moved")).unwrap())
+
+            Ok(Response::builder()
+                .status(StatusCode::MOVED_PERMANENTLY)
+                .header("Location", "/get_image/1")
+                .body(Body::from("Moved"))
+                .unwrap())
         }
         _ => Ok(not_found()),
     }
