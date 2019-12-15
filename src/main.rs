@@ -13,15 +13,11 @@ use futures_util::future::join3;
 
 use std::time::Duration;
 
-use std::sync::{
-    //atomic::{AtomicUsize, Ordering},
-    Arc,
-};
+use std::sync::Arc;
 
 //se hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Result, Server, StatusCode};
-
 
 #[derive(Template)]
 #[template(path = "hello.html")]
@@ -47,7 +43,7 @@ impl Shared {
 
 enum Event {
     IncClick,
-    IncLoop
+    IncLoop,
 }
 
 /// Shorthand for the transmit half of the message channel.
@@ -56,16 +52,15 @@ type Tx = mpsc::UnboundedSender<Event>;
 /// Shorthand for the receive half of the message channel.
 type Rx = mpsc::UnboundedReceiver<Event>;
 
-
 #[tokio::main]
 async fn main() {
     //pretty_env_logger::init();
 
     let addr = "0.0.0.0:1337".parse().unwrap();
 
-    let (mut tx, mut rx) = mpsc::unbounded_channel::<Event>();
+    let (tx, mut rx): (Tx, Rx) = mpsc::unbounded_channel::<Event>();
 
-    let tx = Arc::new(Mutex::new(tx));
+    let tx: Arc<Mutex<Tx>> = Arc::new(Mutex::new(tx));
 
     // For the most basic of state, we just share a counter, that increments
     // with each request, and we send its value back in the response.
@@ -115,18 +110,13 @@ async fn main() {
 
     println!("Starting Server");
 
-    /*  let result = join.await;
-    if let Err(e) = server.await {
-        eprintln!("server error: {}", e);
-    } */
-
     let _ret = join3(reducer_task, my_task, server).await;
 }
 
 async fn response_function(
     req: Request<Body>,
     state: Arc<Mutex<Shared>>,
-    tx: Arc<Mutex<Tx>>
+    tx: Arc<Mutex<Tx>>,
 ) -> Result<Response<Body>> {
     //let state = Arc::clone(&state);
     if let Err(_err) = tx.lock().await.send(Event::IncClick) {
@@ -151,9 +141,12 @@ async fn response_function(
         }
         (&Method::POST, "/take_picture") => {
             let body = req.body();
-            
-            Ok(Response::builder().status(StatusCode::MOVED_PERMANENTLY)
-        .header("Location", "/get_image/1").body(Body::from("Moved")).unwrap())
+
+            Ok(Response::builder()
+                .status(StatusCode::MOVED_PERMANENTLY)
+                .header("Location", "/get_image/1")
+                .body(Body::from("Moved"))
+                .unwrap())
         }
         _ => Ok(not_found()),
     }
@@ -167,8 +160,7 @@ fn not_found() -> Response<Body> {
         .unwrap()
 }
 
-
-async fn reducer(event: Event, state: &Mutex<Shared>)  {
+async fn reducer(event: Event, state: &Mutex<Shared>) {
     match event {
         Event::IncLoop => {
             state.lock().await.loop_count += 1;
@@ -177,5 +169,4 @@ async fn reducer(event: Event, state: &Mutex<Shared>)  {
             state.lock().await.click_count += 1;
         }
     };
-    
 }
