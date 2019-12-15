@@ -22,7 +22,6 @@ use std::sync::Arc;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Result, Server, StatusCode};
 
-static NOTFOUND: &[u8] = b"Not Found";
 
 #[derive(Template)]
 #[template(path = "hello.html")]
@@ -116,7 +115,7 @@ async fn response_function(
                 .unwrap())
         }
         (&Method::GET, "/favicon.ico") => {
-            if let Ok(mut file) = tokio::fs::File::open("favicon.ico").await {
+            if let Ok(mut file) = File::open("favicon.ico").await {
                 let mut buf = Vec::new();
                 if let Ok(_) = file.read_to_end(&mut buf).await {
                     return Ok(Response::builder().body(buf.into()).unwrap());                    
