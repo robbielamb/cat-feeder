@@ -2,10 +2,13 @@
 /// and hyper.rs
 use askama::Template;
 
+//#[macro_use] extern crate log;
+use log::{debug, info, warn, error};
+
 use tokio::task;
 //use tokio::time;
-/* use tokio::fs::File;
-use tokio::io::AsyncReadExt; */
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::delay_for;
 
@@ -54,8 +57,9 @@ type Rx = mpsc::UnboundedReceiver<Event>;
 
 #[tokio::main]
 async fn main() {
-    //pretty_env_logger::init();
-
+    pretty_env_logger::init();
+    info!("Logging");
+    warn!("Warning");
     let addr = "0.0.0.0:1337".parse().unwrap();
 
     let (tx, mut rx): (Tx, Rx) = mpsc::unbounded_channel::<Event>();
@@ -98,17 +102,17 @@ async fn main() {
         loop {
             {
                 if let Err(_err) = my_task_tx.lock().await.send(Event::IncLoop) {
-                    println!("Error sending message");
+                    error!("Error sending message");
                 }
                 let state = state.lock().await;
                 //state.loop_count += 1;
-                println!("In the spawned loop {} times", state.loop_count);
+                info!("In the spawned loop {} times", state.loop_count);
             }
             delay_for(Duration::from_secs(5)).await;
         }
     });
 
-    println!("Starting Server");
+    info!("Starting Server");
 
     let _ret = join3(reducer_task, my_task, server).await;
 }
@@ -128,6 +132,8 @@ async fn response_function(
 
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/") => {
+            let headers = req.headers();
+            debug!("Headers are {:?}", headers);
             let hello = HelloTemplate {
                 name: "hey there",
                 click_count: &state.click_count,
@@ -135,9 +141,20 @@ async fn response_function(
             };
             let template = hello.render().unwrap();
             Ok(Response::builder()
+                .header("content-language", "en-US")
+                .header("content-type", "text/html; charset=utf-8")
                 .status(StatusCode::OK)
                 .body(Body::from(template))
                 .unwrap())
+        }
+        (&Method::GET, "/favicon.ico") => {
+            if let Ok(mut file) = File::open("favicon.ico").await {
+                let mut buf = Vec::new();
+                if let Ok(_) = file.read_to_end(&mut buf).await {
+                    return Ok(Response::builder().body(buf.into()).unwrap());                    
+                }
+            }
+            Ok(not_found())
         }
         (&Method::POST, "/take_picture") => {
             let body = req.body();
