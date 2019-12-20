@@ -3,7 +3,7 @@
 use askama::Template;
 
 //#[macro_use] extern crate log;
-use log::{debug, info, warn, error};
+use log::{debug, error, info, trace, warn};
 
 use tokio::task;
 //use tokio::time;
@@ -20,7 +20,49 @@ use std::sync::Arc;
 
 //se hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Method, Request, Response, Result, Server, StatusCode};
+use hyper::{Body, Method, Request, Response, Server, StatusCode};
+
+#[derive(Debug)]
+enum Error {
+    BoringError,
+    HyperError(hyper::error::Error),
+    HttpError(http::Error),
+    TemplateError(askama::Error),
+}
+
+impl std::error::Error for Error {}
+
+impl std::convert::From<hyper::error::Error> for Error {
+    fn from(err: hyper::error::Error) -> Self {
+        Error::HyperError(err)
+    }
+}
+
+impl std::convert::From<http::Error> for Error {
+    fn from(err: http::Error) -> Self {
+        Error::HttpError(err)
+    }
+}
+
+impl std::convert::From<askama::Error> for Error {
+    fn from(err: askama::Error) -> Self {
+        Error::TemplateError(err)
+    }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::BoringError => write!(f, "A boring Error"),
+            Error::HyperError(err) => err.fmt(f),
+            Error::HttpError(err) => err.fmt(f),
+            Error::TemplateError(err) => err.fmt(f),
+        }
+    }
+}
+
+type Result<T> = std::result::Result<T, Error>;
+
 
 #[derive(Template)]
 #[template(path = "hello.html")]
@@ -56,7 +98,7 @@ type Tx = mpsc::UnboundedSender<Event>;
 type Rx = mpsc::UnboundedReceiver<Event>;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
     info!("Logging");
     warn!("Warning");
@@ -89,7 +131,7 @@ async fn main() {
 
                 let state = Arc::clone(&clone_state);
                 let tx = Arc::clone(&service_tx);
-                response_function(request, state, tx)
+                test_response(request, state, tx)
             }))
         }
     });
@@ -115,23 +157,34 @@ async fn main() {
     info!("Starting Server");
 
     let _ret = join3(reducer_task, my_task, server).await;
+
+    Ok(())
 }
 
-async fn response_function(
+async fn test_response(
     req: Request<Body>,
     state: Arc<Mutex<Shared>>,
     tx: Arc<Mutex<Tx>>,
 ) -> Result<Response<Body>> {
-    //let state = Arc::clone(&state);
-    if let Err(_err) = tx.lock().await.send(Event::IncClick) {
-        println!("Error sending message");
-    }
-
     let state = state.lock().await;
-    //state.click_count += 1;
 
-    match (req.method(), req.uri().path()) {
-        (&Method::GET, "/") => {
+    debug!("Pre Parse Path {:?}", req.uri().path());
+    let path = req
+        .uri()
+        .path()
+        .split("/")
+        .filter(|x| x != &"")
+        .collect::<Vec<&str>>();
+
+    debug!("Requested path is: {:?}", path);
+
+    let baz = (req.method(), &path[..]);
+
+    match baz {
+        (&Method::GET, &[]) => {
+            if let Err(_err) = tx.lock().await.send(Event::IncClick) {
+                error!("Error sending message");
+            }
             let headers = req.headers();
             debug!("Headers are {:?}", headers);
             let hello = HelloTemplate {
@@ -140,6 +193,24 @@ async fn response_function(
                 loop_count: &state.loop_count,
             };
             let template = hello.render().unwrap();
+            Ok(respond_with_html().body(Body::from(template))?)
+        }
+        (&Method::GET, &["favicon.ico"]) => {
+            if let Ok(mut file) = File::open("favicon.ico").await {
+                let mut buf = Vec::new();
+                if let Ok(_) = file.read_to_end(&mut buf).await {
+                    return Ok(Response::builder().body(buf.into())?);
+                }
+            }
+            Ok(not_found())
+        }
+        (&Method::GET, &["hello", x]) => {
+            let hello = HelloTemplate {
+                name: x,
+                click_count: &state.click_count,
+                loop_count: &state.loop_count,
+            };
+            let template = hello.render()?;
             Ok(Response::builder()
                 .header("content-language", "en-US")
                 .header("content-type", "text/html; charset=utf-8")
@@ -147,26 +218,10 @@ async fn response_function(
                 .body(Body::from(template))
                 .unwrap())
         }
-        (&Method::GET, "/favicon.ico") => {
-            if let Ok(mut file) = File::open("favicon.ico").await {
-                let mut buf = Vec::new();
-                if let Ok(_) = file.read_to_end(&mut buf).await {
-                    return Ok(Response::builder().body(buf.into()).unwrap());                    
-                }
-            }
-            Ok(not_found())
-        }
-        (&Method::POST, "/take_picture") => {
-            let body = req.body();
-
-            Ok(Response::builder()
-                .status(StatusCode::MOVED_PERMANENTLY)
-                .header("Location", "/get_image/1")
-                .body(Body::from("Moved"))
-                .unwrap())
-        }
+        (&Method::GET, &["hello", rest]) => Ok(not_found()),
         _ => Ok(not_found()),
     }
+    //Ok(Response::builder().body(Body::from("im body")).unwrap())
 }
 
 fn not_found() -> Response<Body> {
@@ -175,6 +230,13 @@ fn not_found() -> Response<Body> {
         .status(StatusCode::NOT_FOUND)
         .body(body)
         .unwrap()
+}
+
+fn respond_with_html() -> http::response::Builder {
+    Response::builder()
+        .header("content-language", "en-US")
+        .header("content-type", "text/html; charset=utf-8")
+        .status(StatusCode::OK)
 }
 
 async fn reducer(event: Event, state: &Mutex<Shared>) {
