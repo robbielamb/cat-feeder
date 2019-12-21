@@ -1,6 +1,8 @@
 use crate::result::Result;
 use hyper::{Body, Response, StatusCode};
 
+
+// Render a string as the body to be returned
 pub fn render_template(template: String) -> Result<Response<Body>> {
     let body = Body::from(template);
     Ok(Response::builder()
@@ -11,6 +13,7 @@ pub fn render_template(template: String) -> Result<Response<Body>> {
         .body(body)?)
 }
 
+/// Redirect to the given location. Location is lame and just a string right now
 pub fn redirect_to(location: String) -> Result<Response<Body>> {
     let foo = format!("Navigate to: {}", location);
     let body = Body::from(foo);
@@ -23,6 +26,7 @@ pub fn redirect_to(location: String) -> Result<Response<Body>> {
         .body(body)?)
 }
 
+/// This has not been found. 404
 pub fn not_found() -> Result<Response<Body>> {
     let body = Body::from("Not Found");
     Ok(Response::builder()

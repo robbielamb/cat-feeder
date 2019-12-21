@@ -134,6 +134,7 @@ async fn test_response(
     let state = state.lock().await;
 
     debug!("Pre Parse Path {:?}", req.uri().path());
+
     let path = req
         .uri()
         .path()
@@ -144,14 +145,11 @@ async fn test_response(
     debug!("Requested path is: {:?}", path);
 
     //let baz = (req.method(), &path[..]);
+    let headers = req.headers();
+    debug!("Headers are {:?}", headers);
 
     match (req.method(), &path[..]) {
-        (&Method::GET, &[]) => {
-            if let Err(_err) = tx.lock().await.send(Event::IncClick) {
-                error!("Error sending message");
-            }
-            let headers = req.headers();
-            debug!("Headers are {:?}", headers);
+        (&Method::GET, &[]) => {        
             let hello = HelloTemplate {
                 name: "hey there",
                 click_count: &state.click_count,
@@ -182,15 +180,13 @@ async fn test_response(
                 loop_count: &state.loop_count,
             };
             let template = hello.render()?;
-            Ok(Response::builder()
-                .header("content-language", "en-US")
-                .header("content-type", "text/html; charset=utf-8")
-                .status(StatusCode::OK)
-                .body(Body::from(template))
-                .unwrap())
+            http_utils::render_template(template)
         }
-        (&Method::GET, &["hello", rest]) => http_utils::not_found(),
-        _ => http_utils::not_found(),
+
+        
+        _ => {
+            debug!("Not Found");
+            http_utils::not_found()}
     }
     //Ok(Response::builder().body(Body::from("im body")).unwrap())
 }

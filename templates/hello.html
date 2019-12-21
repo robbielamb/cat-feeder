@@ -6,4 +6,7 @@
 <p>Hello, {{ name }}!</p>
 <p>I've been called {{ click_count }} times.</p>
 <p>There have been {{ loop_count}} loops of the other task.</p>
+<form action="/increase_click" method="post">
+    <button name="Click" value="increase_click">Click</button>
+</form>
 {% endblock %}
