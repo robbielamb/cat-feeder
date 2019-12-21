@@ -22,47 +22,12 @@ use std::sync::Arc;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
-#[derive(Debug)]
-enum Error {
-    BoringError,
-    HyperError(hyper::error::Error),
-    HttpError(http::Error),
-    TemplateError(askama::Error),
-}
+mod result;
+//use result::error::Error;
+use result::Result;
 
-impl std::error::Error for Error {}
-
-impl std::convert::From<hyper::error::Error> for Error {
-    fn from(err: hyper::error::Error) -> Self {
-        Error::HyperError(err)
-    }
-}
-
-impl std::convert::From<http::Error> for Error {
-    fn from(err: http::Error) -> Self {
-        Error::HttpError(err)
-    }
-}
-
-impl std::convert::From<askama::Error> for Error {
-    fn from(err: askama::Error) -> Self {
-        Error::TemplateError(err)
-    }
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::BoringError => write!(f, "A boring Error"),
-            Error::HyperError(err) => err.fmt(f),
-            Error::HttpError(err) => err.fmt(f),
-            Error::TemplateError(err) => err.fmt(f),
-        }
-    }
-}
-
-type Result<T> = std::result::Result<T, Error>;
-
+mod http_utils;
+//use http_utils;
 
 #[derive(Template)]
 #[template(path = "hello.html")]
@@ -102,7 +67,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
     info!("Logging");
     warn!("Warning");
-    let addr = "0.0.0.0:1337".parse().unwrap();
+    let addr = "0.0.0.0:1337".parse()?;
 
     let (tx, mut rx): (Tx, Rx) = mpsc::unbounded_channel::<Event>();
 
@@ -178,9 +143,9 @@ async fn test_response(
 
     debug!("Requested path is: {:?}", path);
 
-    let baz = (req.method(), &path[..]);
+    //let baz = (req.method(), &path[..]);
 
-    match baz {
+    match (req.method(), &path[..]) {
         (&Method::GET, &[]) => {
             if let Err(_err) = tx.lock().await.send(Event::IncClick) {
                 error!("Error sending message");
@@ -192,17 +157,23 @@ async fn test_response(
                 click_count: &state.click_count,
                 loop_count: &state.loop_count,
             };
-            let template = hello.render().unwrap();
-            Ok(respond_with_html().body(Body::from(template))?)
+            let template = hello.render()?;
+            http_utils::render_template(template)
+        }
+        (&Method::POST, &["increase_click"]) => {
+            if let Err(err) = tx.lock().await.send(Event::IncClick) {
+                error!("Erron increasing click {}", err)
+            }
+            http_utils::redirect_to("/".to_string())
         }
         (&Method::GET, &["favicon.ico"]) => {
             if let Ok(mut file) = File::open("favicon.ico").await {
                 let mut buf = Vec::new();
-                if let Ok(_) = file.read_to_end(&mut buf).await {
+                if file.read_to_end(&mut buf).await.is_ok() {
                     return Ok(Response::builder().body(buf.into())?);
                 }
             }
-            Ok(not_found())
+            http_utils::not_found()
         }
         (&Method::GET, &["hello", x]) => {
             let hello = HelloTemplate {
@@ -218,25 +189,10 @@ async fn test_response(
                 .body(Body::from(template))
                 .unwrap())
         }
-        (&Method::GET, &["hello", rest]) => Ok(not_found()),
-        _ => Ok(not_found()),
+        (&Method::GET, &["hello", rest]) => http_utils::not_found(),
+        _ => http_utils::not_found(),
     }
     //Ok(Response::builder().body(Body::from("im body")).unwrap())
-}
-
-fn not_found() -> Response<Body> {
-    let body = Body::from("Not Found");
-    Response::builder()
-        .status(StatusCode::NOT_FOUND)
-        .body(body)
-        .unwrap()
-}
-
-fn respond_with_html() -> http::response::Builder {
-    Response::builder()
-        .header("content-language", "en-US")
-        .header("content-type", "text/html; charset=utf-8")
-        .status(StatusCode::OK)
 }
 
 async fn reducer(event: Event, state: &Mutex<Shared>) {
