@@ -1,4 +1,5 @@
 pub mod error {
+    /// Error enum for this <app_name> app
     #[derive(Debug)]
     pub enum Error {
         //BoringError,
@@ -39,4 +40,5 @@ pub mod error {
     }
 }
 
+/// Result type for this <app_name> app
 pub type Result<T> = std::result::Result<T, error::Error>;

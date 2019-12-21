@@ -12,7 +12,9 @@ futures-core = { version = "0.3", default-features = false }
 futures-channel = "0.3"
 futures-util = { version = "0.3", default-features = false }
 http = "^0.2.0"
-hyper = "^0.13.0"
+hyper = "^0.13.1"
 log = "0.4"
 pretty_env_logger = "0.3.1"
+rust-embed={ version = "^5.2.0", features = ["debug-embed"] }
 tokio = { version = "^0.2.5", features = ["full"]}
+url = "1.0"

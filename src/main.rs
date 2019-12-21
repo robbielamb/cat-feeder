@@ -14,13 +14,14 @@ use tokio::time::delay_for;
 
 use futures_util::future::join3;
 
-use std::time::Duration;
-
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 //se hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Method, Request, Response, Server, StatusCode};
+use hyper::{Body, Method, Request, Response, Server};
+use url::form_urlencoded;
 
 mod result;
 //use result::error::Error;
@@ -28,6 +29,10 @@ use result::Result;
 
 mod http_utils;
 //use http_utils;
+
+mod assets;
+use assets::Image;
+
 
 #[derive(Template)]
 #[template(path = "hello.html")]
@@ -131,8 +136,6 @@ async fn test_response(
     state: Arc<Mutex<Shared>>,
     tx: Arc<Mutex<Tx>>,
 ) -> Result<Response<Body>> {
-    let state = state.lock().await;
-
     debug!("Pre Parse Path {:?}", req.uri().path());
 
     let path = req
@@ -149,7 +152,8 @@ async fn test_response(
     debug!("Headers are {:?}", headers);
 
     match (req.method(), &path[..]) {
-        (&Method::GET, &[]) => {        
+        (&Method::GET, &[]) => {
+            let state = state.lock().await;
             let hello = HelloTemplate {
                 name: "hey there",
                 click_count: &state.click_count,
@@ -159,21 +163,37 @@ async fn test_response(
             http_utils::render_template(template)
         }
         (&Method::POST, &["increase_click"]) => {
+            //let body = req.body();
+            //let whole_body = hyper::body::aggregate(req).await?;
+            let b = hyper::body::to_bytes(req).await?;
+            debug!("The body is {:?}", b);
+            // Parse the request body. form_urlencoded::parse
+            // always succeeds, but in general parsing may
+            // fail (for example, an invalid post of json), so
+            // returning early with BadRequest may be
+            // necessary.
+            //
+            // Warning: this is a simplified use case. In
+            // principle names can appear multiple times in a
+            // form, and the values should be rolled up into a
+            // HashMap<String, Vec<String>>. However in this
+            // example the simpler approach is sufficient.
+            let params = form_urlencoded::parse(b.as_ref())
+                .into_owned()
+                .collect::<HashMap<String, String>>();
+
+            debug!("Hashed Params are {:?}", params);
+
             if let Err(err) = tx.lock().await.send(Event::IncClick) {
-                error!("Erron increasing click {}", err)
+                error!("Error sending click event: {}", err)
             }
             http_utils::redirect_to("/".to_string())
         }
         (&Method::GET, &["favicon.ico"]) => {
-            if let Ok(mut file) = File::open("favicon.ico").await {
-                let mut buf = Vec::new();
-                if file.read_to_end(&mut buf).await.is_ok() {
-                    return Ok(Response::builder().body(buf.into())?);
-                }
-            }
-            http_utils::not_found()
+           http_utils::get_png("cat-icon_64.png")         
         }
         (&Method::GET, &["hello", x]) => {
+            let state = state.lock().await;
             let hello = HelloTemplate {
                 name: x,
                 click_count: &state.click_count,
@@ -183,12 +203,11 @@ async fn test_response(
             http_utils::render_template(template)
         }
 
-        
         _ => {
             debug!("Not Found");
-            http_utils::not_found()}
+            http_utils::not_found()
+        }
     }
-    //Ok(Response::builder().body(Body::from("im body")).unwrap())
 }
 
 async fn reducer(event: Event, state: &Mutex<Shared>) {
