@@ -17,7 +17,6 @@ use tokio::io::AsyncReadExt;
 use tokio::sync::{mpsc, Mutex};
 use tokio::task;
 use tokio::time::delay_for;
-use tokio::time::delay_for;
 use url::form_urlencoded;
 
 // Local Code
@@ -40,6 +39,7 @@ struct Shared {
     click_count: u32,
     loop_count: u32,
     camera_enabled: bool,
+    camera_info: Option<rascam::CameraInfo>,
 }
 
 impl Shared {
@@ -48,6 +48,7 @@ impl Shared {
             click_count: 0,
             loop_count: 0,
             camera_enabled: false,
+            camera_info: None,
         }
     }
 }
@@ -215,7 +216,7 @@ async fn reducer(event: Event, state: &Mutex<Shared>) {
     };
 }
 
-async fn take_picture(info: &rascam::CameraInfo) -> Result<()> {
+async fn take_picture(info: &rascam::CameraInfo) -> Result<Vec<u8>> {
     let mut camera = rascam::SimpleCamera::new(info.clone())?;
     camera.activate()?;
 
@@ -223,5 +224,5 @@ async fn take_picture(info: &rascam::CameraInfo) -> Result<()> {
 
     let picture = camera.take_one_async().await?;
 
-    Ok()
+    Ok(picture)
 }

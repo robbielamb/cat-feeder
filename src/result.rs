@@ -3,12 +3,19 @@ pub mod error {
     #[derive(Debug)]
     pub enum Error {
         //BoringError,
+        CameraError(rascam::CameraError),
         HyperError(hyper::error::Error),
         HttpError(http::Error),
         TemplateError(askama::Error),
     }
 
     impl std::error::Error for Error {}
+    
+    impl std::convert::From<rascam::CameraError> for Error {
+        fn from(err: rascam::CameraError) -> Self {
+            Error::CameraError(err)
+        }
+    }
 
     impl std::convert::From<hyper::error::Error> for Error {
         fn from(err: hyper::error::Error) -> Self {
@@ -32,6 +39,7 @@ pub mod error {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 //Error::BoringError => write!(f, "A boring Error"),
+                Error::CameraError(err) => err.fmt(f),
                 Error::HyperError(err) => err.fmt(f),
                 Error::HttpError(err) => err.fmt(f),
                 Error::TemplateError(err) => err.fmt(f),
