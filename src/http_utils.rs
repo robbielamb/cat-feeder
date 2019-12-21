@@ -1,7 +1,8 @@
-use crate::assets::Image;
-use crate::result::Result;
 use hyper::{Body, Response, StatusCode};
 use log::error;
+
+use crate::assets::Image;
+use crate::result::Result;
 
 // Render a string as the body to be returned
 pub fn render_template(template: String) -> Result<Response<Body>> {
@@ -54,7 +55,7 @@ pub fn get_png(name: &str) -> Result<Response<Body>> {
     }
 }
 
-pub fn get_ico(name: &str)-> Result<Response<Body>> {
+pub fn get_ico(name: &str) -> Result<Response<Body>> {
     if let Some(img) = Image::get(name) {
         let res = Response::builder()
             .header("Content-Type", "image/x-icon")

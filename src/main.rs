@@ -1,38 +1,32 @@
-/// https://github.com/djc/askama
-/// and hyper.rs
-use askama::Template;
-
-//#[macro_use] extern crate log;
-use log::{debug, error, info, trace, warn};
-
-use tokio::task;
-//use tokio::time;
-use tokio::fs::File;
-use tokio::io::AsyncReadExt;
-use tokio::sync::{mpsc, Mutex};
-use tokio::time::delay_for;
-
-use futures_util::future::join3;
-
+// Standard imports
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-//se hyper::server::conn::AddrStream;
+// https://github.com/djc/askama
+use askama::Template;
+
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server};
+
+use futures_util::future::join3;
+use log::{debug, error, info, trace, warn};
+use rascam;
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
+use tokio::sync::{mpsc, Mutex};
+use tokio::task;
+use tokio::time::delay_for;
+use tokio::time::delay_for;
 use url::form_urlencoded;
 
+// Local Code
+mod assets;
+use assets::Image;
+mod http_utils;
 mod result;
 //use result::error::Error;
 use result::Result;
-
-mod http_utils;
-//use http_utils;
-
-mod assets;
-use assets::Image;
-
 
 #[derive(Template)]
 #[template(path = "hello.html")]
@@ -45,6 +39,7 @@ struct HelloTemplate<'a> {
 struct Shared {
     click_count: u32,
     loop_count: u32,
+    camera_enabled: bool,
 }
 
 impl Shared {
@@ -52,6 +47,7 @@ impl Shared {
         Shared {
             click_count: 0,
             loop_count: 0,
+            camera_enabled: false,
         }
     }
 }
@@ -189,9 +185,7 @@ async fn test_response(
             }
             http_utils::redirect_to("/".to_string())
         }
-        (&Method::GET, &["favicon.ico"]) => {
-           http_utils::get_png("cat-icon_64.png")         
-        }
+        (&Method::GET, &["favicon.ico"]) => http_utils::get_png("cat-icon_64.png"),
         (&Method::GET, &["hello", x]) => {
             let state = state.lock().await;
             let hello = HelloTemplate {
@@ -219,4 +213,15 @@ async fn reducer(event: Event, state: &Mutex<Shared>) {
             state.lock().await.click_count += 1;
         }
     };
+}
+
+async fn take_picture(info: &rascam::CameraInfo) -> Result<()> {
+    let mut camera = rascam::SimpleCamera::new(info.clone())?;
+    camera.activate()?;
+
+    delay_for(Duration::from_millis(2000)).await;
+
+    let picture = camera.take_one_async().await?;
+
+    Ok()
 }
