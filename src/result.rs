@@ -10,7 +10,7 @@ pub mod error {
     }
 
     impl std::error::Error for Error {}
-    
+
     impl std::convert::From<rascam::CameraError> for Error {
         fn from(err: rascam::CameraError) -> Self {
             Error::CameraError(err)

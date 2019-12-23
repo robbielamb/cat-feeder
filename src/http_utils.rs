@@ -66,3 +66,11 @@ pub fn get_ico(name: &str) -> Result<Response<Body>> {
         not_found()
     }
 }
+
+pub fn get_camera_image(image: Vec<u8>) -> Result<Response<Body>> {
+    let body = Body::from(image);
+
+    Ok(Response::builder()
+        .header("Content-Type", "image/jpg")
+        .body(body)?)
+}
