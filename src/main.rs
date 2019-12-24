@@ -10,13 +10,12 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server};
 
 use futures::join;
-use futures_util::future::join3;
 use log::{debug, error, info, trace, warn};
 use rascam;
 
-use tokio::fs::File;
+/* use tokio::fs::File;
 use tokio::io::AsyncReadExt;
-use tokio::prelude::*;
+use tokio::prelude::*; */
 use tokio::runtime::Runtime;
 use tokio::sync::{mpsc, Mutex};
 use tokio::task;
@@ -25,10 +24,9 @@ use url::form_urlencoded;
 
 // Local Code
 mod assets;
-use assets::Image;
+//use assets::Image;
 mod http_utils;
 mod result;
-//use result::error::Error;
 use result::Result;
 
 #[derive(Template)]
@@ -48,10 +46,6 @@ struct Shared {
 }
 
 impl Shared {
-    /* fn new() -> Self {
-        Self::new_with_camera(None)
-    } */
-
     fn new() -> Self {
         Shared {
             click_count: 0,
@@ -141,28 +135,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             }
             debug!("Ending picture task");
         });
-       
-    //});
 
-    ///////////////////////////////////////////////////////////////
-
-    //rt.block_on(async {
-
-
-        // Should capture this error...
-        /*      let camera_info = match rascam::info() {
-            Ok(info) => {
-                if info.cameras.len() < 1 {
-                    warn!("No cameras found on device");
-                    None
-                } else {
-                    Some(info.cameras[0])
-                }
-            },
-            Err(err) => {error!("Error opening camera: {}", err); None},
-        }; */
-        // For the most basic of state, we just share a counter, that increments
-        // with each request, and we send its value back in the response.
         let state = Arc::new(Mutex::new(Shared::new()));
 
         let reducer_state = Arc::clone(&state);
@@ -213,8 +186,6 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         info!("Starting Server");
 
         let _ret = join!(reducer_task, my_task, server, picture_task);
-
-       
     });
 
     Ok(())
@@ -303,27 +274,18 @@ async fn test_response(
                 http_utils::get_camera_image(some_pict.to_vec())
             }
         }
-        (&Method::GET, &["picture", numb]) => {
-            match numb.parse::<usize>() {
-                Ok(i) => {
-                    let picts = &state.lock().await.pictures;
-                    if picts.len() > 0 && i < picts.len()  {
-                        let some_pict = &picts[i];
-                        http_utils::get_camera_image(some_pict.to_vec())                       
-                    } else {
-                        http_utils::not_found() 
-                    }
+        (&Method::GET, &["picture", numb]) => match numb.parse::<usize>() {
+            Ok(i) => {
+                let picts = &state.lock().await.pictures;
+                if picts.len() > 0 && i < picts.len() {
+                    let some_pict = &picts[i];
+                    http_utils::get_camera_image(some_pict.to_vec())
+                } else {
+                    http_utils::not_found()
                 }
-                Err(_e) => http_utils::not_found()
             }
-         /*    let picts = &state.lock().await.pictures;
-            if picts.len() < 1 {
-                http_utils::not_found()
-            } else {
-                let some_pict = &picts[picts.len() - 1];
-                http_utils::get_camera_image(some_pict.to_vec())
-            } */
-        }
+            Err(_e) => http_utils::not_found(),
+        },
         (&Method::GET, &["hello", x]) => {
             let state = state.lock().await;
             let hello = HelloTemplate {
@@ -362,15 +324,3 @@ async fn reducer(event: Event, state: &Mutex<Shared>) {
         }
     };
 }
-
-/* fn take_picture() -> Result<Vec<u8>> {
-    let mut camera = rascam::SimpleCamera::new(info.clone())?;
-    camera.activate()?;
-
-    std::thread::sleep(Duration::from_millis(2000));
-
-    debug!("Taking picture");
-    let picture = camera.take_one()?;
-
-    Ok(picture)
-} */
