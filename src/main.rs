@@ -76,7 +76,6 @@ enum Picture {
 type PictTx = mpsc::UnboundedSender<Picture>;
 type PictRx = mpsc::UnboundedReceiver<Picture>;
 
-//#[tokio::main]
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
     info!("Logging");
@@ -110,7 +109,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                         debug!("We have a camera");
                         camera = rascam::SimpleCamera::new(info.cameras[0].clone()).unwrap();
                         camera.activate().unwrap();
-                        std::thread::sleep(Duration::from_millis(2000));
+                        delay_for(Duration::from_millis(2000)).await;                        
                         Some(camera)
                     }
                 }
@@ -122,7 +121,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             if let Some(mut camera) = camera_info {
                 while let Some(_) = pict_rx.recv().await {
                     debug!("Request for a picture");
-                    let picture = camera.take_one();
+                    let picture = camera.take_one_async().await;
                     match picture {
                         Ok(pict) => {
                             if let Err(err) = pictures_tx.lock().await.send(Event::AddImage(pict)) {
