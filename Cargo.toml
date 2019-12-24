@@ -28,3 +28,6 @@ members = ["mmal-sys", "rascam"]
 [patch.crates-io]
 mmal-sys = { path="./mmal-sys" }
 rascam = { path="./rascam" }
+
+[profile.release]
+lto = true # enable link time optomizations 

@@ -11,7 +11,6 @@ use hyper::{Body, Method, Request, Response, Server};
 
 use futures::join;
 use log::{debug, error, info, trace, warn};
-use rascam;
 
 /* use tokio::fs::File;
 use tokio::io::AsyncReadExt;
@@ -29,6 +28,12 @@ mod http_utils;
 mod result;
 use result::Result;
 
+mod camera;
+use camera::{picture_task, Picture, Rx as PictRx, Tx as PictTx};
+
+mod state;
+use state::{reducer_task, Event, Rx, Shared, Tx};
+
 #[derive(Template)]
 #[template(path = "hello.html")]
 struct HelloTemplate<'a> {
@@ -38,149 +43,51 @@ struct HelloTemplate<'a> {
     picture_count: &'a usize,
 }
 
-struct Shared {
-    click_count: u32,
-    loop_count: u32,
-    has_camera: bool,
-    pictures: Vec<Vec<u8>>,
-}
-
-impl Shared {
-    fn new() -> Self {
-        Shared {
-            click_count: 0,
-            loop_count: 0,
-            has_camera: false,
-            pictures: vec![],
-        }
-    }
-}
-
-enum Event {
-    IncClick,
-    IncLoop,
-    HasCamera(bool),
-    AddImage(Vec<u8>),
-}
-
-/// Shorthand for the transmit half of the message channel.
-type Tx = mpsc::UnboundedSender<Event>;
-
-/// Shorthand for the receive half of the message channel.
-type Rx = mpsc::UnboundedReceiver<Event>;
-
-enum Picture {
-    Take,
-}
-
-type PictTx = mpsc::UnboundedSender<Picture>;
-type PictRx = mpsc::UnboundedReceiver<Picture>;
-
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
-    info!("Logging");
-    warn!("Warning");
+
     let mut rt = Runtime::new()?;
+
     let addr = "0.0.0.0:1337".parse()?;
 
-    let (tx, mut rx): (Tx, Rx) = mpsc::unbounded_channel::<Event>();
+    let (tx, rx): (Tx, Rx) = mpsc::unbounded_channel::<Event>();
 
-    let tx: Arc<Mutex<Tx>> = Arc::new(Mutex::new(tx));
+    let (pict_tx, pict_rx): (PictTx, PictRx) = mpsc::unbounded_channel::<Picture>();
 
-    let (pict_tx, mut pict_rx): (PictTx, PictRx) = mpsc::unbounded_channel::<Picture>();
-
-    let pict_tx: Arc<Mutex<PictTx>> = Arc::new(Mutex::new(pict_tx));
+    //let pict_tx: Arc<Mutex<PictTx>> = Arc::new(Mutex::new(pict_tx));
 
     let local = task::LocalSet::new();
-    let pictures_tx = Arc::clone(&tx);
-    let _picture_task = local.block_on(&mut rt, async move {
-        let picture_task = task::spawn_local(async move {
-            debug!("Starting picture task");
-            let mut camera;
-            let camera_info = match rascam::info() {
-                Ok(info) => {
-                    if info.cameras.len() < 1 {
-                        warn!("No cameras found on device");
-                        None
-                    } else {
-                        if let Err(err) = pictures_tx.lock().await.send(Event::HasCamera(true)) {
-                            error!("Error sending click event: {}", err)
-                        }
-                        debug!("We have a camera");
-                        camera = rascam::SimpleCamera::new(info.cameras[0].clone()).unwrap();
-                        camera.activate().unwrap();
-                        delay_for(Duration::from_millis(2000)).await;                        
-                        Some(camera)
-                    }
-                }
-                Err(err) => {
-                    error!("Error opening camera: {}", err);
-                    None
-                }
-            };
-            if let Some(mut camera) = camera_info {
-                while let Some(_) = pict_rx.recv().await {
-                    debug!("Request for a picture");
-                    let picture = camera.take_one_async().await;
-                    match picture {
-                        Ok(pict) => {
-                            if let Err(err) = pictures_tx.lock().await.send(Event::AddImage(pict)) {
-                                error!("Error saving picture: {}", err)
-                            }
-                        }
-                        Err(err) => error!("Error taking picture: {}", err),
-                    }
-                }
-            }
-            debug!("Ending picture task");
-        });
+    //let pictures_tx = Arc::clone(&tx);
+    let _unknown_tasks = local.block_on(&mut rt, async move {
+        let picture_task = picture_task(pict_rx, tx.clone());
 
         let state = Arc::new(Mutex::new(Shared::new()));
 
         let reducer_state = Arc::clone(&state);
-        let reducer_task = task::spawn(async move {
-            while let Some(event) = rx.recv().await {
-                //let state = state.lock().await;
-                reducer(event, &reducer_state).await
-            }
-        });
+        let reducer_task = reducer_task(reducer_state, rx);
+
+        let my_task = looping_state(tx.clone(), Arc::clone(&state));
+
+        let tx: Arc<Mutex<Tx>> = Arc::new(Mutex::new(tx));
 
         let service_tx = Arc::clone(&tx);
-        let pict_tx = Arc::clone(&pict_tx);
         let clone_state = Arc::clone(&state);
         let make_service = make_service_fn(move |_| {
             let clone_state = Arc::clone(&clone_state);
             let service_tx = Arc::clone(&service_tx);
-            let pict_tx = Arc::clone(&pict_tx);
+            let pict_tx = pict_tx.clone();
             async move {
                 Ok::<_, hyper::Error>(service_fn(move |request: Request<Body>| {
-                    //let count = counter.fetch_add(1, Ordering::AcqRel);
-
                     let state = Arc::clone(&clone_state);
                     let tx = Arc::clone(&service_tx);
-                    let pict_tx = Arc::clone(&pict_tx);
+
+                    let pict_tx = pict_tx.clone();
                     test_response(request, state, tx, pict_tx)
                 }))
             }
         });
 
         let server = Server::bind(&addr).serve(make_service);
-
-        let my_task_tx = Arc::clone(&tx);
-        let my_task = task::spawn(async move {
-            //let state = Arc::clone(&state);
-            loop {
-                {
-                    if let Err(_err) = my_task_tx.lock().await.send(Event::IncLoop) {
-                        error!("Error sending message");
-                    }
-                    let state = state.lock().await;
-                    //state.loop_count += 1;
-                    info!("In the spawned loop {} times", state.loop_count);
-                }
-                delay_for(Duration::from_secs(5)).await;
-            }
-        });
 
         info!("Starting Server");
 
@@ -190,11 +97,27 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn looping_state(tx: Tx, state: Arc<Mutex<Shared>>) -> task::JoinHandle<()> {
+    task::spawn(async move {
+        loop {
+            {
+                if let Err(_err) = tx.send(Event::IncLoop) {
+                    error!("Error sending message");
+                }
+                let state = state.lock().await;
+                //state.loop_count += 1;
+                info!("In the spawned loop {} times", state.loop_count);
+            }
+            delay_for(Duration::from_secs(5)).await;
+        }
+    })
+}
+
 async fn test_response(
     req: Request<Body>,
     state: Arc<Mutex<Shared>>,
     tx: Arc<Mutex<Tx>>,
-    pict_tx: Arc<Mutex<PictTx>>,
+    pict_tx: PictTx,
 ) -> Result<Response<Body>> {
     debug!("Pre Parse Path {:?}", req.uri().path());
 
@@ -257,7 +180,7 @@ async fn test_response(
                 false => http_utils::not_found(), // Should have a nice message about taking a picture or not
                 true => {
                     // Send message to take picture
-                    if let Err(err) = pict_tx.lock().await.send(Picture::Take) {
+                    if let Err(err) = pict_tx.send(Picture::Take) {
                         error!("Error taking picture: {}", err);
                     };
                     http_utils::redirect_to("/latest_picture".to_string())
@@ -302,24 +225,4 @@ async fn test_response(
             http_utils::not_found()
         }
     }
-}
-
-async fn reducer(event: Event, state: &Mutex<Shared>) {
-    match event {
-        Event::IncLoop => {
-            state.lock().await.loop_count += 1;
-        }
-        Event::IncClick => {
-            state.lock().await.click_count += 1;
-        }
-        Event::HasCamera(camera) => {
-            state.lock().await.has_camera = camera;
-        }
-        Event::AddImage(image) => {
-            debug!("Saving image to memory");
-            //let image = Box::new(image);
-            //image.to
-            state.lock().await.pictures.push(image);
-        }
-    };
 }
