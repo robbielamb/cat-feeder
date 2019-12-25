@@ -35,6 +35,8 @@ mod http_utils;
 mod result;
 use result::Result;
 
+mod rfid_reader;
+
 mod camera;
 use camera::{picture_task, Picture, Rx as PictRx, Tx as PictTx};
 
@@ -65,7 +67,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let (pict_tx, pict_rx): (PictTx, PictRx) = mpsc::unbounded_channel::<Picture>();
 
         let (mut stop_tx, mut stop_rx) = watch::channel(state::RunState::Run);
-
+        
         let picture_task = picture_task(pict_rx, tx.clone());
 
         let state = Arc::new(Mutex::new(Shared::new()));
@@ -73,7 +75,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let reducer_state = Arc::clone(&state);
         let reducer_task = reducer_task(reducer_state, rx, stop_rx.clone());
 
-        let my_task = looping_state(tx.clone(), stop_rx.clone(), Arc::clone(&state));
+        let looping_task = looping_state(tx.clone(), stop_rx.clone(), Arc::clone(&state));
 
         let tx: Arc<Mutex<Tx>> = Arc::new(Mutex::new(tx));
 
@@ -118,7 +120,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
         info!("Starting Services");
 
-        let _ret = join!(reducer_task, my_task, quit_listener, server, picture_task);
+        let _ret = join!(reducer_task, looping_task, quit_listener, server, picture_task);
     });
 
     Ok(())
@@ -138,6 +140,7 @@ fn looping_state(
                 let state = state.lock().await;
                 info!("In the spawned loop {} times", state.loop_count);
             }
+            // Either wait for 5 seconds or wait for the quit message
             select! {
                 _ = Box::pin(delay_for(Duration::from_secs(5)).fuse()) => (),
                 recv = stop_rx.recv().fuse() => if let Some(state::RunState::Shutdown) = recv {
