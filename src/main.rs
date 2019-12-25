@@ -10,13 +10,20 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server};
 
 use futures::join;
-use log::{debug, error, info, trace, warn};
+
+use futures::{
+    future::FutureExt, // for `.fuse()`
+    select,
+};
+
+use log::{debug, error, info};
 
 /* use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::prelude::*; */
 use tokio::runtime::Runtime;
-use tokio::sync::{mpsc, Mutex};
+use tokio::signal::unix::{signal, SignalKind};
+use tokio::sync::{mpsc, watch, Mutex};
 use tokio::task;
 use tokio::time::delay_for;
 use url::form_urlencoded;
@@ -50,23 +57,23 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     let addr = "0.0.0.0:1337".parse()?;
 
-    let (tx, rx): (Tx, Rx) = mpsc::unbounded_channel::<Event>();
-
-    let (pict_tx, pict_rx): (PictTx, PictRx) = mpsc::unbounded_channel::<Picture>();
-
-    //let pict_tx: Arc<Mutex<PictTx>> = Arc::new(Mutex::new(pict_tx));
-
     let local = task::LocalSet::new();
     //let pictures_tx = Arc::clone(&tx);
     let _unknown_tasks = local.block_on(&mut rt, async move {
+        let (tx, rx): (Tx, Rx) = mpsc::unbounded_channel::<Event>();
+
+        let (pict_tx, pict_rx): (PictTx, PictRx) = mpsc::unbounded_channel::<Picture>();
+
+        let (mut stop_tx, mut stop_rx) = watch::channel(state::RunState::Run);
+
         let picture_task = picture_task(pict_rx, tx.clone());
 
         let state = Arc::new(Mutex::new(Shared::new()));
 
         let reducer_state = Arc::clone(&state);
-        let reducer_task = reducer_task(reducer_state, rx);
+        let reducer_task = reducer_task(reducer_state, rx, stop_rx.clone());
 
-        let my_task = looping_state(tx.clone(), Arc::clone(&state));
+        let my_task = looping_state(tx.clone(), stop_rx.clone(), Arc::clone(&state));
 
         let tx: Arc<Mutex<Tx>> = Arc::new(Mutex::new(tx));
 
@@ -88,16 +95,40 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         });
 
         let server = Server::bind(&addr).serve(make_service);
+        //let mut http_serv_stop = stop_rx.clone();
+        let server = server.with_graceful_shutdown(async move {
+            debug!("In the quitting service");
+            while let Some(state::RunState::Run) = stop_rx.recv().await {}
+            ()
+        });
 
-        info!("Starting Server");
+        let quit_listener = task::spawn_local(async move {
+            debug!("Installing signal handler");
+            // An infinite stream of hangup signals.
+            let mut stream = signal(SignalKind::interrupt()).unwrap();
+            stream.recv().await;
+            debug!("got signal HUP. Asking tasks to shut down");
+            if let Err(_err) = stop_tx.broadcast(state::RunState::Shutdown) {
+                error!("Error broadcasting shutdown");
+            }
+            stop_tx.closed().await;
+            debug!("Quitting quit listener");
+            ()
+        });
 
-        let _ret = join!(reducer_task, my_task, server, picture_task);
+        info!("Starting Services");
+
+        let _ret = join!(reducer_task, my_task, quit_listener, server, picture_task);
     });
 
     Ok(())
 }
 
-fn looping_state(tx: Tx, state: Arc<Mutex<Shared>>) -> task::JoinHandle<()> {
+fn looping_state(
+    tx: Tx,
+    mut stop_rx: watch::Receiver<state::RunState>,
+    state: Arc<Mutex<Shared>>,
+) -> task::JoinHandle<()> {
     task::spawn(async move {
         loop {
             {
@@ -105,10 +136,15 @@ fn looping_state(tx: Tx, state: Arc<Mutex<Shared>>) -> task::JoinHandle<()> {
                     error!("Error sending message");
                 }
                 let state = state.lock().await;
-                //state.loop_count += 1;
                 info!("In the spawned loop {} times", state.loop_count);
             }
-            delay_for(Duration::from_secs(5)).await;
+            select! {
+                _ = Box::pin(delay_for(Duration::from_secs(5)).fuse()) => (),
+                recv = stop_rx.recv().fuse() => if let Some(state::RunState::Shutdown) = recv {
+                    debug!("Shutting down looper");
+                    break }
+            }
+            //delay_for(Duration::from_secs(5)).await;
         }
     })
 }

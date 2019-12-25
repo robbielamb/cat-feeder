@@ -1,8 +1,12 @@
 use std::sync::Arc;
 
+use futures::{
+    future::FutureExt, // for `.fuse()`
+    select,
+};
 use log::debug;
 
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, watch, Mutex};
 use tokio::task;
 
 /// Shorthand for the transmit half of the message channel.
@@ -49,17 +53,39 @@ async fn reducer(event: Event, state: &Mutex<Shared>) {
         }
         Event::AddImage(image) => {
             debug!("Saving image to memory");
-            //let image = Box::new(image);
-            //image.to
             state.lock().await.pictures.push(image);
         }
     };
 }
 
-pub fn reducer_task(state_handle: Arc<Mutex<Shared>>, mut rx: Rx) -> task::JoinHandle<()> {
+pub fn reducer_task(
+    state_handle: Arc<Mutex<Shared>>,
+    mut rx: Rx,
+    mut stop_rx: watch::Receiver<RunState>,
+) -> task::JoinHandle<()> {
     task::spawn(async move {
-        while let Some(event) = rx.recv().await {
+        /*  while let Some(event) = rx.recv().await {
             reducer(event, &state_handle).await
+        } */
+
+        loop {
+            select! {
+                event = rx.recv().fuse() => {
+                    if let Some(event) = event {
+                        reducer(event, &state_handle).await
+                    }
+                }
+                event = stop_rx.recv().fuse() => if let Some(RunState::Shutdown) = event {
+                    debug!("Ending reducer task");
+                    break
+                }
+            }
         }
     })
+}
+
+#[derive(Clone, Copy)]
+pub enum RunState {
+    Run,
+    Shutdown,
 }

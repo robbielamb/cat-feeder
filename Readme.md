@@ -6,6 +6,8 @@
   * A CSS File
   * Custom logger for capturing logs
   * Clean Shutdown
+  * Add Serial Port Reading
+  * Add Distance Sensor Reading
 
 
   ## Icon Url 
@@ -21,4 +23,3 @@
   $ export MMAL_INCLUDE_DIR=$MMAL_DIR/include
   $ export MMAL_LIB_DIR=$MMAL_DIR/lib
   ```
-  
