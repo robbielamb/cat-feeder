@@ -17,6 +17,7 @@ pub type Rx = mpsc::UnboundedReceiver<Event>;
 
 pub struct Shared {
     pub click_count: u32,
+    last_tag_read: Option<u32>,
     pub loop_count: u32,
     pub has_camera: bool,
     pub pictures: Vec<Vec<u8>>,
@@ -26,6 +27,7 @@ impl Shared {
     pub fn new() -> Self {
         Shared {
             click_count: 0,
+            last_tag_read: None,
             loop_count: 0,
             has_camera: false,
             pictures: vec![],
@@ -36,6 +38,7 @@ impl Shared {
 pub enum Event {
     IncClick,
     IncLoop,
+    ReadTag(u32),
     HasCamera(bool),
     AddImage(Vec<u8>),
 }
@@ -47,6 +50,9 @@ async fn reducer(event: Event, state: &Mutex<Shared>) {
         }
         Event::IncClick => {
             state.lock().await.click_count += 1;
+        }
+        Event::ReadTag(tag) => {
+            state.lock().await.last_tag_read = Some(tag)
         }
         Event::HasCamera(camera) => {
             state.lock().await.has_camera = camera;

@@ -67,7 +67,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let (pict_tx, pict_rx): (PictTx, PictRx) = mpsc::unbounded_channel::<Picture>();
 
         let (mut stop_tx, mut stop_rx) = watch::channel(state::RunState::Run);
-        
+
         let picture_task = picture_task(pict_rx, tx.clone());
 
         let state = Arc::new(Mutex::new(Shared::new()));
@@ -104,6 +104,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             ()
         });
 
+        let rfid_reader_task = rfid_reader::rfid_reader();
+
         let quit_listener = task::spawn_local(async move {
             debug!("Installing signal handler");
             // An infinite stream of hangup signals.
@@ -120,7 +122,14 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
         info!("Starting Services");
 
-        let _ret = join!(reducer_task, looping_task, quit_listener, server, picture_task);
+        let _ret = join!(
+            looping_task,
+            picture_task,
+            quit_listener,
+            reducer_task,
+            rfid_reader_task,
+            server,
+        );
     });
 
     Ok(())
