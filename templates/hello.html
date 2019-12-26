@@ -6,7 +6,9 @@
 <p>Hello, {{ name }}!</p>
 <p>I've been called {{ click_count }} times.</p>
 <p>I know about {{ picture_count }} images</p>
-<p>There have been {{ loop_count}} loops of the other task.</p>
+<p>There have been {{ loop_count }} loops of the other task.</p>
+<p>Last tag read {{ last_tag }}.</p>
+
 <form action="/increase_click" method="post">
     <button name="Click" value="increase_click">Click</button>
 </form>

@@ -1,6 +1,6 @@
 use std::{io, str};
 
-use log::{debug, info, trace};
+use log::{debug, error, info, trace};
 
 
 use futures::{
@@ -15,6 +15,8 @@ use tokio_util::codec::{Decoder, Encoder};
 
 use bytes::buf::Buf;
 use bytes::BytesMut;
+
+use crate::state::{Tx, Event};
 
 const DEFAULT_TTY: &str = "/dev/ttyS0";
 
@@ -152,7 +154,7 @@ impl Encoder for RFIDCodec {
     }
 }
 
-pub fn rfid_reader() -> task::JoinHandle<()> {
+pub fn rfid_reader(tx: Tx) -> task::JoinHandle<()> {
     task::spawn(async move {
         debug!("starting rfid reader");
         // Default settings look to be okay
@@ -186,6 +188,9 @@ pub fn rfid_reader() -> task::JoinHandle<()> {
         } */
         while let Some(line_result) = reader.next().await {
             let line = line_result.expect("Failed to read line");
+            if let Err(err) = tx.send(Event::ReadTag(line)) {
+                error!("Error updating last read tag: {}", err);
+            }
             info!("{}", line);
         }
 

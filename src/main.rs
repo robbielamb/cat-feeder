@@ -50,6 +50,7 @@ struct HelloTemplate<'a> {
     click_count: &'a u32,
     loop_count: &'a u32,
     picture_count: &'a usize,
+    last_tag: u32,
 }
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -77,18 +78,20 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
         let looping_task = looping_state(tx.clone(), stop_rx.clone(), Arc::clone(&state));
 
-        let tx: Arc<Mutex<Tx>> = Arc::new(Mutex::new(tx));
+        let rfid_reader_task = rfid_reader::rfid_reader(tx.clone());
 
-        let service_tx = Arc::clone(&tx);
+        //let tx: Arc<Mutex<Tx>> = Arc::new(Mutex::new(tx));
+
+        let service_tx = tx.clone();
         let clone_state = Arc::clone(&state);
         let make_service = make_service_fn(move |_| {
             let clone_state = Arc::clone(&clone_state);
-            let service_tx = Arc::clone(&service_tx);
+            let service_tx = service_tx.clone();
             let pict_tx = pict_tx.clone();
             async move {
                 Ok::<_, hyper::Error>(service_fn(move |request: Request<Body>| {
                     let state = Arc::clone(&clone_state);
-                    let tx = Arc::clone(&service_tx);
+                    let tx = service_tx.clone();
 
                     let pict_tx = pict_tx.clone();
                     test_response(request, state, tx, pict_tx)
@@ -104,7 +107,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             ()
         });
 
-        let rfid_reader_task = rfid_reader::rfid_reader();
+      
 
         let quit_listener = task::spawn_local(async move {
             debug!("Installing signal handler");
@@ -164,7 +167,7 @@ fn looping_state(
 async fn test_response(
     req: Request<Body>,
     state: Arc<Mutex<Shared>>,
-    tx: Arc<Mutex<Tx>>,
+    tx: Tx,
     pict_tx: PictTx,
 ) -> Result<Response<Body>> {
     debug!("Pre Parse Path {:?}", req.uri().path());
@@ -190,6 +193,7 @@ async fn test_response(
                 click_count: &state.click_count,
                 loop_count: &state.loop_count,
                 picture_count: &state.pictures.len(),
+                last_tag: state.last_tag_read().unwrap_or(0),
             };
             let template = hello.render()?;
             http_utils::render_template(template)
@@ -216,7 +220,7 @@ async fn test_response(
 
             debug!("Hashed Params are {:?}", params);
 
-            if let Err(err) = tx.lock().await.send(Event::IncClick) {
+            if let Err(err) = tx.send(Event::IncClick) {
                 error!("Error sending click event: {}", err)
             }
             http_utils::redirect_to("/".to_string())
@@ -263,6 +267,7 @@ async fn test_response(
                 click_count: &state.click_count,
                 loop_count: &state.loop_count,
                 picture_count: &state.pictures.len(),
+                last_tag: state.last_tag_read().unwrap_or(0),
             };
             let template = hello.render()?;
             http_utils::render_template(template)

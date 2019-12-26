@@ -33,6 +33,10 @@ impl Shared {
             pictures: vec![],
         }
     }
+
+    pub fn last_tag_read(&self) -> Option<u32> {
+        self.last_tag_read
+    }
 }
 
 pub enum Event {
