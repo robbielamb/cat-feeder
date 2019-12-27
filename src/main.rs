@@ -78,7 +78,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
         let looping_task = looping_state(tx.clone(), stop_rx.clone(), Arc::clone(&state));
 
-        let rfid_reader_task = rfid_reader::rfid_reader(tx.clone());
+        let rfid_reader_task = rfid_reader::rfid_reader(tx.clone(), stop_rx.clone());
 
         //let tx: Arc<Mutex<Tx>> = Arc::new(Mutex::new(tx));
 
@@ -106,8 +106,6 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             while let Some(state::RunState::Run) = stop_rx.recv().await {}
             ()
         });
-
-      
 
         let quit_listener = task::spawn_local(async move {
             debug!("Installing signal handler");

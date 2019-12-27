@@ -2,21 +2,21 @@ use std::{io, str};
 
 use log::{debug, error, info, trace};
 
-
 use futures::{
     future::FutureExt, // for `.fuse()`
-    stream::{Stream, StreamExt, FusedStream},
+  
     select,
-    pin_mut,
+    stream::{StreamExt},
 };
 
+use tokio::sync::watch;
 use tokio::task;
 use tokio_util::codec::{Decoder, Encoder};
 
 use bytes::buf::Buf;
 use bytes::BytesMut;
 
-use crate::state::{Tx, Event};
+use crate::state::{Event, RunState, Tx};
 
 const DEFAULT_TTY: &str = "/dev/ttyS0";
 
@@ -49,7 +49,7 @@ impl Decoder for RFIDCodec {
         if let Some(0) = start_pos {
             // The last byte should be a 3. If not we have garbage on the line
             if test_src[13] != 3 {
-                // Consume the first byte then upto the next byte of value 2. 
+                // Consume the first byte then upto the next byte of value 2.
                 let _ = src.get_u8();
                 return Err(consume_bytes(src, find_byte(src.as_ref(), 2)));
             }
@@ -60,7 +60,7 @@ impl Decoder for RFIDCodec {
 
             let msg_data: &[u8] = &my_slice[1..11];
             let _version_data: &[u8] = &my_slice[1..3];
-            let tag_data: &[u8]= &my_slice[3..11];
+            let tag_data: &[u8] = &my_slice[3..11];
             let checksum_data: &[u8] = &my_slice[11..13];
 
             //let checksum= str::from_utf8(&my_slice[11..13]).map(|x| u16::from_str_radix(x, 16)).unwrap().unwrap();
@@ -83,7 +83,8 @@ impl Decoder for RFIDCodec {
             let comupted_checksum = compute_checksum(msg_data).unwrap();
             trace!(
                 "Computed checksum {}, HEX: {:X?}",
-                comupted_checksum, comupted_checksum
+                comupted_checksum,
+                comupted_checksum
             );
 
             let tag_str = tag_data
@@ -94,13 +95,13 @@ impl Decoder for RFIDCodec {
             let tag = u32::from_str_radix(&tag_str, 16).unwrap_or(0);
             trace!("Tag: {:?} tag_str: {:?}", tag, tag_str);
 
-            return Ok(Some(tag))
+            return Ok(Some(tag));
 
-            /* return match str::from_utf8(&my_slice[3..11]) {
-                Ok(s) => Ok(Some(s.to_string())),
+        /* return match str::from_utf8(&my_slice[3..11]) {
+            Ok(s) => Ok(Some(s.to_string())),
 
-                Err(_) => Err(io::Error::new(io::ErrorKind::Other, "Invalid String")),
-            }; */
+            Err(_) => Err(io::Error::new(io::ErrorKind::Other, "Invalid String")),
+        }; */
         } else {
             // The first byte wasn't a 2. Consume the buffer upto the 2 we found
             return Err(consume_bytes(src, start_pos));
@@ -154,13 +155,13 @@ impl Encoder for RFIDCodec {
     }
 }
 
-pub fn rfid_reader(tx: Tx) -> task::JoinHandle<()> {
+pub fn rfid_reader(tx: Tx, mut stop_rx: watch::Receiver<RunState>) -> task::JoinHandle<()> {
     task::spawn(async move {
         debug!("starting rfid reader");
         // Default settings look to be okay
         let mut settings = tokio_serial::SerialPortSettings::default();
 
-        settings.timeout = std::time::Duration::from_secs(190);
+        //settings.timeout = std::time::Duration::from_secs(190);
 
         let mut port = tokio_serial::Serial::from_path(DEFAULT_TTY, &settings).unwrap();
 
@@ -169,31 +170,46 @@ pub fn rfid_reader(tx: Tx) -> task::JoinHandle<()> {
 
         let mut reader = RFIDCodec.framed(port);
         //pin_mut!(reader);
-      /*   loop {
+        loop {
             /* match reader.next().await {
-                Some(line_result) => {
-                    let line = line_result.expect("Failed to read line");
-                    info!("{}", line)
-                } */
+            Some(line_result) => {
+                let line = line_result.expect("Failed to read line");
+                info!("{}", line)
+            } */
 
-                select! {
-                    Some(line) = reader.next().fuse() => {
-                        let line = line.expect("Failet to read");
-                        info!("{}", line)
+            select! {
+                some_id = reader.next().fuse() => {
+                    match some_id {
+                        Some(line) => {
+                            let line = line.expect("Failet to read");
+                            if let Err(err) = tx.send(Event::ReadTag(line)) {
+                                error!("Error updating last read tag: {}", err);
+                            }
+                    info!("{}", line)
+                        }
+                        None => ()
                     }
                 }
+                event = stop_rx.recv().fuse() => if let Some(RunState::Shutdown) = event {
+                    debug!("Ending RFID task");
+                    break
+                }
+            }
+        }
 
-
-            
-        } */
-        while let Some(line_result) = reader.next().await {
+        /*  while let Some(line_result) = get_next(&mut reader).await{
             let line = line_result.expect("Failed to read line");
             if let Err(err) = tx.send(Event::ReadTag(line)) {
                 error!("Error updating last read tag: {}", err);
             }
             info!("{}", line);
-        }
+        } */
 
         debug!("exiting");
     })
 }
+
+/* async fn get_next(reader: &mut Framed<tokio_serial::Serial, RFIDCodec>) -> Option<Result<u32, std::io::Error>> {
+    reader.next().await
+}
+ */

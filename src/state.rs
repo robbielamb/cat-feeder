@@ -55,9 +55,7 @@ async fn reducer(event: Event, state: &Mutex<Shared>) {
         Event::IncClick => {
             state.lock().await.click_count += 1;
         }
-        Event::ReadTag(tag) => {
-            state.lock().await.last_tag_read = Some(tag)
-        }
+        Event::ReadTag(tag) => state.lock().await.last_tag_read = Some(tag),
         Event::HasCamera(camera) => {
             state.lock().await.has_camera = camera;
         }
