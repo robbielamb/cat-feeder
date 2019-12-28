@@ -13,7 +13,6 @@ futures-core = { version = "0.3", default-features = false }
 futures-channel = "0.3"
 futures = "0.3"
 futures-util = { version = "0.3", default-features = false }
-hex = "0.4.0"
 http = "^0.2.0"
 hyper = "^0.13.1"
 log = "0.4"

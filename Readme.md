@@ -1,13 +1,12 @@
 # To Do
-  * Clean up Code.
-    * Function is separate files.
-    * Other neat things.
   * Correct betterer headers
   * A CSS File
   * Custom logger for capturing logs
-  * Clean Shutdown
-  * Add Serial Port Reading
-  * Add Distance Sensor Reading
+  * Add Distance Sensor Reading (i2c)
+  * Add some buttons. GPIO stuff.
+  * Don't blindly unwrap things. Handle the errors.
+  * Evaluate changing the broadcast to shut down into a general broadcast to all tasks.
+  * What is up with
 
 
   ## Icon Url 

@@ -1,3 +1,4 @@
+// Adapted from https://www.mschoeffler.de/2018/01/05/arduino-tutorial-how-to-use-the-rdm630-rdm6300-rfid-reader/
 use std::{io, str};
 
 use log::{debug, error, info, trace};
@@ -159,7 +160,7 @@ pub fn rfid_reader(tx: Tx, mut stop_rx: watch::Receiver<RunState>) -> task::Join
     task::spawn(async move {
         debug!("starting rfid reader");
         // Default settings look to be okay
-        let mut settings = tokio_serial::SerialPortSettings::default();
+        let settings = tokio_serial::SerialPortSettings::default();
 
         //settings.timeout = std::time::Duration::from_secs(190);
 
@@ -171,12 +172,6 @@ pub fn rfid_reader(tx: Tx, mut stop_rx: watch::Receiver<RunState>) -> task::Join
         let mut reader = RFIDCodec.framed(port);
         //pin_mut!(reader);
         loop {
-            /* match reader.next().await {
-            Some(line_result) => {
-                let line = line_result.expect("Failed to read line");
-                info!("{}", line)
-            } */
-
             select! {
                 some_id = reader.next().fuse() => {
                     match some_id {
@@ -196,20 +191,11 @@ pub fn rfid_reader(tx: Tx, mut stop_rx: watch::Receiver<RunState>) -> task::Join
                 }
             }
         }
-
-        /*  while let Some(line_result) = get_next(&mut reader).await{
-            let line = line_result.expect("Failed to read line");
-            if let Err(err) = tx.send(Event::ReadTag(line)) {
-                error!("Error updating last read tag: {}", err);
-            }
-            info!("{}", line);
-        } */
-
         debug!("exiting");
     })
 }
 
-/* async fn get_next(reader: &mut Framed<tokio_serial::Serial, RFIDCodec>) -> Option<Result<u32, std::io::Error>> {
+/*  async fn get_next(reader: &mut Framed<tokio_serial::Serial, RFIDCodec>) -> Option<Result<u32, std::io::Error>> {
     reader.next().await
-}
- */
+} */
+ 
