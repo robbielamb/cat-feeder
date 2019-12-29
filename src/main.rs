@@ -18,6 +18,8 @@ use futures::{
 
 use log::{debug, error, info};
 
+use rppal::gpio::{Gpio, InputPin, Level, Trigger};
+
 /* use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::prelude::*; */
@@ -60,6 +62,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     let addr = "0.0.0.0:1337".parse()?;
 
+    let gpios = Gpio::new()?;
+
     let local = task::LocalSet::new();
     //let pictures_tx = Arc::clone(&tx);
     let _unknown_tasks = local.block_on(&mut rt, async move {
@@ -81,6 +85,21 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let rfid_reader_task = rfid_reader::rfid_reader(tx.clone(), stop_rx.clone());
 
         //let tx: Arc<Mutex<Tx>> = Arc::new(Mutex::new(tx));
+
+        let button = gpios.get(20).unwrap().into_input_pulldown();
+        let button_tx = tx.clone();
+        let button_listener = watch_pin(button, stop_rx.clone(), move |i| match i {
+            Level::High => {
+                info!("Caught a highm edge here");
+                if let Err(err) = button_tx.send(Event::IncClick) {
+                    error!("Error sending click: {}", err)
+                }
+            }
+            Level::Low => {
+                info!("Caught a low edge here");
+                ()
+            }
+        });
 
         let service_tx = tx.clone();
         let clone_state = Arc::clone(&state);
@@ -124,6 +143,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         info!("Starting Services");
 
         let _ret = join!(
+            button_listener,
             looping_task,
             picture_task,
             quit_listener,
@@ -276,4 +296,25 @@ async fn test_response(
             http_utils::not_found()
         }
     }
+}
+
+pub fn watch_pin<C>(
+    mut pin: InputPin,
+    mut stop_rx: watch::Receiver<state::RunState>,
+    response: C,
+) -> task::JoinHandle<()>
+where
+    C: FnMut(Level) + Send + 'static,
+{
+    task::spawn(async move {
+        let _ = pin.set_async_interrupt(Trigger::Both, response);
+
+        loop {
+            //while let Some(state::RunState::Run) = stop_rx.recv().await {}
+            if let Some(state::RunState::Shutdown) = stop_rx.recv().await {
+                debug!("Shutting down Pin Task");
+                break;
+            }
+        }
+    })
 }

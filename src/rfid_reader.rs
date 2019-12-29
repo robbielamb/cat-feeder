@@ -5,9 +5,9 @@ use log::{debug, error, info, trace};
 
 use futures::{
     future::FutureExt, // for `.fuse()`
-  
+
     select,
-    stream::{StreamExt},
+    stream::StreamExt,
 };
 
 use tokio::sync::watch;
@@ -198,4 +198,3 @@ pub fn rfid_reader(tx: Tx, mut stop_rx: watch::Receiver<RunState>) -> task::Join
 /*  async fn get_next(reader: &mut Framed<tokio_serial::Serial, RFIDCodec>) -> Option<Result<u32, std::io::Error>> {
     reader.next().await
 } */
- 
