@@ -41,7 +41,7 @@ mod camera;
 use camera::{picture_task, Picture, Rx as PictRx, Tx as PictTx};
 
 mod state;
-use state::{reducer_task, Event, Rx, Shared, Tx};
+use state::{reducer_task, Action, ActionRx, ActionTx, Event, EventRx, EventTx, State};
 
 #[derive(Template)]
 #[template(path = "hello.html")]
@@ -55,32 +55,30 @@ struct HelloTemplate<'a> {
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
-
-    let mut rt = Runtime::new()?;
-
+    
     let addr = "0.0.0.0:1337".parse()?;
 
+    let mut rt = Runtime::new()?;
     let local = task::LocalSet::new();
-    //let pictures_tx = Arc::clone(&tx);
-    let _unknown_tasks = local.block_on(&mut rt, async move {
-        let (tx, rx): (Tx, Rx) = mpsc::unbounded_channel::<Event>();
+ 
 
-        let (pict_tx, pict_rx): (PictTx, PictRx) = mpsc::unbounded_channel::<Picture>();
+    let (tx, rx): (EventTx, EventRx) = mpsc::unbounded_channel::<Event>();
+    let (pict_tx, pict_rx): (PictTx, PictRx) = mpsc::unbounded_channel::<Picture>();
+    let (mut stop_tx, mut stop_rx): (ActionTx, ActionRx) = watch::channel(state::Action::Run);
 
-        let (mut stop_tx, mut stop_rx) = watch::channel(state::RunState::Run);
+    let state = Arc::new(Mutex::new(State::new()));
 
-        let picture_task = picture_task(pict_rx, tx.clone());
+    let _ = local.block_on(&mut rt, async move {
 
-        let state = Arc::new(Mutex::new(Shared::new()));
+        let reducer_task = reducer_task(Arc::clone(&state), rx, stop_rx.clone());
 
-        let reducer_state = Arc::clone(&state);
-        let reducer_task = reducer_task(reducer_state, rx, stop_rx.clone());
+        let picture_task = picture_task(pict_rx, tx.clone());                     
 
         let looping_task = looping_state(tx.clone(), stop_rx.clone(), Arc::clone(&state));
 
         let rfid_reader_task = rfid_reader::rfid_reader(tx.clone(), stop_rx.clone());
 
-        //let tx: Arc<Mutex<Tx>> = Arc::new(Mutex::new(tx));
+        
 
         let service_tx = tx.clone();
         let clone_state = Arc::clone(&state);
@@ -103,7 +101,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         //let mut http_serv_stop = stop_rx.clone();
         let server = server.with_graceful_shutdown(async move {
             debug!("In the quitting service");
-            while let Some(state::RunState::Run) = stop_rx.recv().await {}
+            while let Some(state::Action::Run) = stop_rx.recv().await {}
             ()
         });
 
@@ -113,7 +111,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             let mut stream = signal(SignalKind::interrupt()).unwrap();
             stream.recv().await;
             debug!("got signal HUP. Asking tasks to shut down");
-            if let Err(_err) = stop_tx.broadcast(state::RunState::Shutdown) {
+            if let Err(_err) = stop_tx.broadcast(state::Action::Shutdown) {
                 error!("Error broadcasting shutdown");
             }
             stop_tx.closed().await;
@@ -137,9 +135,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 }
 
 fn looping_state(
-    tx: Tx,
-    mut stop_rx: watch::Receiver<state::RunState>,
-    state: Arc<Mutex<Shared>>,
+    tx: EventTx,
+    mut stop_rx: watch::Receiver<state::Action>,
+    state: Arc<Mutex<State>>,
 ) -> task::JoinHandle<()> {
     task::spawn(async move {
         loop {
@@ -153,19 +151,18 @@ fn looping_state(
             // Either wait for 5 seconds or wait for the quit message
             select! {
                 _ = Box::pin(delay_for(Duration::from_secs(5)).fuse()) => (),
-                recv = stop_rx.recv().fuse() => if let Some(state::RunState::Shutdown) = recv {
+                recv = stop_rx.recv().fuse() => if let Some(state::Action::Shutdown) = recv {
                     debug!("Shutting down looper");
                     break }
             }
-            //delay_for(Duration::from_secs(5)).await;
         }
     })
 }
 
 async fn test_response(
     req: Request<Body>,
-    state: Arc<Mutex<Shared>>,
-    tx: Tx,
+    state: Arc<Mutex<State>>,
+    tx: EventTx,
     pict_tx: PictTx,
 ) -> Result<Response<Body>> {
     debug!("Pre Parse Path {:?}", req.uri().path());

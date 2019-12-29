@@ -15,7 +15,7 @@ pub enum Picture {
 pub type Tx = mpsc::UnboundedSender<Picture>;
 pub type Rx = mpsc::UnboundedReceiver<Picture>;
 
-pub fn picture_task(mut rx: Rx, state_tx: state::Tx) -> task::JoinHandle<()> {
+pub fn picture_task(mut rx: Rx, state_tx: state::EventTx) -> task::JoinHandle<()> {
     task::spawn_local(async move {
         debug!("Starting picture task");
         let mut camera;

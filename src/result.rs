@@ -2,7 +2,6 @@ pub mod error {
     /// Error enum for this <app_name> app
     #[derive(Debug)]
     pub enum Error {
-        //BoringError,
         CameraError(rascam::CameraError),
         HyperError(hyper::error::Error),
         HttpError(http::Error),
@@ -38,7 +37,6 @@ pub mod error {
     impl std::fmt::Display for Error {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
-                //Error::BoringError => write!(f, "A boring Error"),
                 Error::CameraError(err) => err.fmt(f),
                 Error::HyperError(err) => err.fmt(f),
                 Error::HttpError(err) => err.fmt(f),

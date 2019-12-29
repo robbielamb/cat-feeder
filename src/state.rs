@@ -9,13 +9,19 @@ use log::debug;
 use tokio::sync::{mpsc, watch, Mutex};
 use tokio::task;
 
-/// Shorthand for the transmit half of the message channel.
-pub type Tx = mpsc::UnboundedSender<Event>;
+/// Shorthand for the transmit half of the event message channel.
+pub type EventTx = mpsc::UnboundedSender<Event>;
 
-/// Shorthand for the receive half of the message channel.
-pub type Rx = mpsc::UnboundedReceiver<Event>;
+/// Shorthand for the receive half of the event message channel.
+pub type EventRx = mpsc::UnboundedReceiver<Event>;
 
-pub struct Shared {
+/// Shorthand for the send half of the broadcast channel.
+pub type ActionTx = watch::Sender<Action>;
+
+/// Shorthand for the recieve half of the broadcast channel.
+pub type ActionRx = watch::Receiver<Action>;
+
+pub struct State {
     pub click_count: u32,
     last_tag_read: Option<u32>,
     pub loop_count: u32,
@@ -23,9 +29,9 @@ pub struct Shared {
     pub pictures: Vec<Vec<u8>>,
 }
 
-impl Shared {
+impl State {
     pub fn new() -> Self {
-        Shared {
+        State {
             click_count: 0,
             last_tag_read: None,
             loop_count: 0,
@@ -47,7 +53,7 @@ pub enum Event {
     AddImage(Vec<u8>),
 }
 
-async fn reducer(event: Event, state: &Mutex<Shared>) {
+async fn reducer(event: Event, state: &Mutex<State>) {
     match event {
         Event::IncLoop => {
             state.lock().await.loop_count += 1;
@@ -67,15 +73,11 @@ async fn reducer(event: Event, state: &Mutex<Shared>) {
 }
 
 pub fn reducer_task(
-    state_handle: Arc<Mutex<Shared>>,
-    mut rx: Rx,
-    mut stop_rx: watch::Receiver<RunState>,
+    state_handle: Arc<Mutex<State>>,
+    mut rx: EventRx,
+    mut stop_rx: watch::Receiver<Action>,
 ) -> task::JoinHandle<()> {
     task::spawn(async move {
-        /*  while let Some(event) = rx.recv().await {
-            reducer(event, &state_handle).await
-        } */
-
         loop {
             select! {
                 event = rx.recv().fuse() => {
@@ -83,7 +85,7 @@ pub fn reducer_task(
                         reducer(event, &state_handle).await
                     }
                 }
-                event = stop_rx.recv().fuse() => if let Some(RunState::Shutdown) = event {
+                event = stop_rx.recv().fuse() => if let Some(Action::Shutdown) = event {
                     debug!("Ending reducer task");
                     break
                 }
@@ -93,7 +95,8 @@ pub fn reducer_task(
 }
 
 #[derive(Clone, Copy)]
-pub enum RunState {
+pub enum Action {
     Run,
+    TakePicture,
     Shutdown,
 }

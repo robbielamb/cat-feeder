@@ -5,9 +5,9 @@ use log::{debug, error, info, trace};
 
 use futures::{
     future::FutureExt, // for `.fuse()`
-  
+
     select,
-    stream::{StreamExt},
+    stream::StreamExt,
 };
 
 use tokio::sync::watch;
@@ -17,7 +17,7 @@ use tokio_util::codec::{Decoder, Encoder};
 use bytes::buf::Buf;
 use bytes::BytesMut;
 
-use crate::state::{Event, RunState, Tx};
+use crate::state::{Action, Event, EventTx};
 
 const DEFAULT_TTY: &str = "/dev/ttyS0";
 
@@ -156,7 +156,7 @@ impl Encoder for RFIDCodec {
     }
 }
 
-pub fn rfid_reader(tx: Tx, mut stop_rx: watch::Receiver<RunState>) -> task::JoinHandle<()> {
+pub fn rfid_reader(tx: EventTx, mut stop_rx: watch::Receiver<Action>) -> task::JoinHandle<()> {
     task::spawn(async move {
         debug!("starting rfid reader");
         // Default settings look to be okay
@@ -185,7 +185,7 @@ pub fn rfid_reader(tx: Tx, mut stop_rx: watch::Receiver<RunState>) -> task::Join
                         None => ()
                     }
                 }
-                event = stop_rx.recv().fuse() => if let Some(RunState::Shutdown) = event {
+                event = stop_rx.recv().fuse() => if let Some(Action::Shutdown) = event {
                     debug!("Ending RFID task");
                     break
                 }
@@ -198,4 +198,3 @@ pub fn rfid_reader(tx: Tx, mut stop_rx: watch::Receiver<RunState>) -> task::Join
 /*  async fn get_next(reader: &mut Framed<tokio_serial::Serial, RFIDCodec>) -> Option<Result<u32, std::io::Error>> {
     reader.next().await
 } */
- 
