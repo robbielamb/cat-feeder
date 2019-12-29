@@ -43,7 +43,7 @@ mod camera;
 use camera::picture_task;
 
 mod state;
-use state::{reducer_task, Action, ActionRx, ActionTx, Event, EventRx, EventTx, State};
+use state::{reducer_task, ActionRx, ActionTx, Event, EventRx, EventTx, State};
 
 #[derive(Template)]
 #[template(path = "hello.html")]
@@ -66,7 +66,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let local = task::LocalSet::new();
 
     let (tx, rx): (EventTx, EventRx) = mpsc::unbounded_channel::<Event>();
-  
+
     let (action_tx, mut action_rx): (ActionTx, ActionRx) = watch::channel(state::Action::Startup);
 
     let state = Arc::new(Mutex::new(State::new()));
@@ -99,19 +99,18 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let clone_state = Arc::clone(&state);
         let make_service = make_service_fn(move |_| {
             let clone_state = Arc::clone(&clone_state);
-            let service_tx = service_tx.clone();      
+            let service_tx = service_tx.clone();
             async move {
                 Ok::<_, hyper::Error>(service_fn(move |request: Request<Body>| {
                     let state = Arc::clone(&clone_state);
                     let tx = service_tx.clone();
-   
+
                     test_response(request, state, tx)
                 }))
             }
         });
 
         let server = Server::bind(&addr).serve(make_service);
-        //let mut http_serv_stop = stop_rx.clone();
         let server = server.with_graceful_shutdown(async move {
             debug!("In the quitting service");
             loop {
@@ -119,7 +118,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                     debug!("HTTP Recieved quit event");
                     break;
                 }
-            }            
+            }
             debug!("Quitting HTTP");
             ()
         });
@@ -133,7 +132,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             debug!("got signal HUP. Asking tasks to shut down");
             if let Err(_err) = tx.send(Event::Shutdown) {
                 error!("Error broadcasting shutdown");
-            }       
+            }
             debug!("Quitting quit listener");
             ()
         });
@@ -296,11 +295,9 @@ async fn test_response(
     }
 }
 
-pub fn watch_pin<C>(
-    mut pin: InputPin,
-    mut stop_rx: watch::Receiver<state::Action>,
-    response: C,
-) -> task::JoinHandle<()>
+// First stab at watching GPIO Events
+// The async starts a new thread, so not ideal, but this does seem to work.
+pub fn watch_pin<C>(mut pin: InputPin, mut action_rx: ActionRx, response: C) -> task::JoinHandle<()>
 where
     C: FnMut(Level) + Send + 'static,
 {
@@ -308,8 +305,7 @@ where
         let _ = pin.set_async_interrupt(Trigger::Both, response);
 
         loop {
-            //while let Some(state::RunState::Run) = stop_rx.recv().await {}
-            if let Some(state::Action::Shutdown) = stop_rx.recv().await {
+            if let Some(state::Action::Shutdown) = action_rx.recv().await {
                 debug!("Shutting down Pin Task");
                 break;
             }

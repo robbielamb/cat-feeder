@@ -35,6 +35,7 @@ pub fn not_found() -> Result<Response<Body>> {
         .body(body)?)
 }
 
+/// We can't process whatever you sent us
 pub fn unprocessable_entry() -> Result<Response<Body>> {
     let body = Body::from("Unprocessable entry");
     let res = Response::builder()
@@ -67,6 +68,7 @@ pub fn get_ico(name: &str) -> Result<Response<Body>> {
     }
 }
 
+/// Returns the vec<u8> as an an image.
 pub fn get_camera_image(image: Vec<u8>) -> Result<Response<Body>> {
     let body = Body::from(image);
 

@@ -1,9 +1,5 @@
 use std::sync::Arc;
 
-use futures::{
-    future::FutureExt, // for `.fuse()`
-    select,
-};
 use log::{debug, error};
 
 use tokio::sync::{mpsc, watch, Mutex};
@@ -94,9 +90,9 @@ async fn reducer(event: Event, state: &Mutex<State>, action_tx: &ActionTx) {
         Event::ReadTag(tag) => state.lock().await.last_tag_read = Some(tag),
         Event::HasCamera(camera) => {
             state.lock().await.has_camera = camera;
-        }        
+        }
         Event::TakeImageRequest => {
-            let mut state = state.lock().await;            
+            let mut state = state.lock().await;
             if state.has_camera {
                 state.taking_picture = true;
                 if let Err(_err) = action_tx.broadcast(Action::TakePicture) {
@@ -120,31 +116,20 @@ async fn reducer(event: Event, state: &Mutex<State>, action_tx: &ActionTx) {
     };
 }
 
-/// 
+///
 pub fn reducer_task(
     state_handle: Arc<Mutex<State>>,
     mut rx: EventRx,
     mut action_tx: ActionTx,
 ) -> task::JoinHandle<()> {
     task::spawn(async move {
+        // rx.recv() returns None when all TXs are shutdown
         while let Some(event) = rx.recv().await {
             reducer(event, &state_handle, &action_tx).await
-        }  
+        }
         debug!("All Recievers dropped");
+        // This will stall until all RX side have been shutdown
         action_tx.closed().await;
-        debug!("All senders dropped. Quitting now");
-       /*  loop {
-            select! {
-                event = rx.recv().fuse() => {
-                    if let Some(event) = event {
-                        reducer(event, &state_handle).await
-                    }
-                }
-                event = stop_rx.recv().fuse() => if let Some(Action::Shutdown) = event {
-                    debug!("Ending reducer task");
-                    break
-                }
-            }
-        } */
+        debug!("All recivers dropped. Quitting now");
     })
 }

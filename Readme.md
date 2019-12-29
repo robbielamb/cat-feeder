@@ -2,10 +2,10 @@
   * Correct betterer headers
   * A CSS File
   * Custom logger for capturing logs
-  * Add Distance Sensor Reading (i2c)
+  * Add Distance Sensor Reading (i2c). Must live on the same thread.
   * Don't blindly unwrap things. Handle the errors.
-  * Evaluate changing the broadcast to shut down into a general broadcast to all tasks.
-  * What is up with
+  * What is up with the pi zero?
+  * Integrate the other build crap into the repository
 
 
   ## Icon Url 

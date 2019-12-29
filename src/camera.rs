@@ -8,7 +8,6 @@ use log::{debug, error, warn};
 use tokio::task;
 use tokio::time::delay_for;
 
-
 pub fn picture_task(mut rx: ActionRx, state_tx: EventTx) -> task::JoinHandle<()> {
     task::spawn_local(async move {
         debug!("Starting picture task");
