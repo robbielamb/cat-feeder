@@ -40,7 +40,7 @@ use result::Result;
 mod rfid_reader;
 
 mod camera;
-use camera::{picture_task, Picture, Rx as PictRx, Tx as PictTx};
+use camera::picture_task;
 
 mod state;
 use state::{reducer_task, Action, ActionRx, ActionTx, Event, EventRx, EventTx, State};
@@ -57,36 +57,32 @@ struct HelloTemplate<'a> {
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
-    
+
     let addr = "0.0.0.0:1337".parse()?;
 
     let mut rt = Runtime::new()?;
     let gpios = Gpio::new()?;
 
     let local = task::LocalSet::new();
- 
 
     let (tx, rx): (EventTx, EventRx) = mpsc::unbounded_channel::<Event>();
-    let (pict_tx, pict_rx): (PictTx, PictRx) = mpsc::unbounded_channel::<Picture>();
-    let (mut stop_tx, mut stop_rx): (ActionTx, ActionRx) = watch::channel(state::Action::Run);
+  
+    let (action_tx, mut action_rx): (ActionTx, ActionRx) = watch::channel(state::Action::Startup);
 
     let state = Arc::new(Mutex::new(State::new()));
 
     let _ = local.block_on(&mut rt, async move {
+        let reducer_task = reducer_task(Arc::clone(&state), rx, action_tx);
 
-        let reducer_task = reducer_task(Arc::clone(&state), rx, stop_rx.clone());
+        let picture_task = picture_task(action_rx.clone(), tx.clone());
 
-        let picture_task = picture_task(pict_rx, tx.clone());                     
+        let looping_task = looping_state(tx.clone(), action_rx.clone(), Arc::clone(&state));
 
-        let looping_task = looping_state(tx.clone(), stop_rx.clone(), Arc::clone(&state));
-
-        let rfid_reader_task = rfid_reader::rfid_reader(tx.clone(), stop_rx.clone());
-
-        
+        let rfid_reader_task = rfid_reader::rfid_reader(tx.clone(), action_rx.clone());
 
         let button = gpios.get(20).unwrap().into_input_pulldown();
         let button_tx = tx.clone();
-        let button_listener = watch_pin(button, stop_rx.clone(), move |i| match i {
+        let button_listener = watch_pin(button, action_rx.clone(), move |i| match i {
             Level::High => {
                 info!("Caught a highm edge here");
                 if let Err(err) = button_tx.send(Event::IncClick) {
@@ -103,15 +99,13 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let clone_state = Arc::clone(&state);
         let make_service = make_service_fn(move |_| {
             let clone_state = Arc::clone(&clone_state);
-            let service_tx = service_tx.clone();
-            let pict_tx = pict_tx.clone();
+            let service_tx = service_tx.clone();      
             async move {
                 Ok::<_, hyper::Error>(service_fn(move |request: Request<Body>| {
                     let state = Arc::clone(&clone_state);
                     let tx = service_tx.clone();
-
-                    let pict_tx = pict_tx.clone();
-                    test_response(request, state, tx, pict_tx)
+   
+                    test_response(request, state, tx)
                 }))
             }
         });
@@ -120,20 +114,26 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         //let mut http_serv_stop = stop_rx.clone();
         let server = server.with_graceful_shutdown(async move {
             debug!("In the quitting service");
-            while let Some(state::Action::Run) = stop_rx.recv().await {}
+            loop {
+                if let Some(state::Action::Shutdown) = action_rx.recv().await {
+                    debug!("HTTP Recieved quit event");
+                    break;
+                }
+            }            
+            debug!("Quitting HTTP");
             ()
         });
 
+        //let quit_listener_tx = tx.clone();
         let quit_listener = task::spawn_local(async move {
             debug!("Installing signal handler");
             // An infinite stream of hangup signals.
             let mut stream = signal(SignalKind::interrupt()).unwrap();
             stream.recv().await;
             debug!("got signal HUP. Asking tasks to shut down");
-            if let Err(_err) = stop_tx.broadcast(state::Action::Shutdown) {
+            if let Err(_err) = tx.send(Event::Shutdown) {
                 error!("Error broadcasting shutdown");
-            }
-            stop_tx.closed().await;
+            }       
             debug!("Quitting quit listener");
             ()
         });
@@ -154,6 +154,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+// A simple task that increments a counter ever 5 seconds
 fn looping_state(
     tx: EventTx,
     mut stop_rx: watch::Receiver<state::Action>,
@@ -179,11 +180,11 @@ fn looping_state(
     })
 }
 
+// The webserver task
 async fn test_response(
     req: Request<Body>,
     state: Arc<Mutex<State>>,
     tx: EventTx,
-    pict_tx: PictTx,
 ) -> Result<Response<Body>> {
     debug!("Pre Parse Path {:?}", req.uri().path());
 
@@ -247,7 +248,7 @@ async fn test_response(
                 false => http_utils::not_found(), // Should have a nice message about taking a picture or not
                 true => {
                     // Send message to take picture
-                    if let Err(err) = pict_tx.send(Picture::Take) {
+                    if let Err(err) = tx.send(Event::TakeImageRequest) {
                         error!("Error taking picture: {}", err);
                     };
                     http_utils::redirect_to("/latest_picture".to_string())

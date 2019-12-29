@@ -4,7 +4,7 @@ use futures::{
     future::FutureExt, // for `.fuse()`
     select,
 };
-use log::debug;
+use log::{debug, error};
 
 use tokio::sync::{mpsc, watch, Mutex};
 use tokio::task;
@@ -21,11 +21,13 @@ pub type ActionTx = watch::Sender<Action>;
 /// Shorthand for the recieve half of the broadcast channel.
 pub type ActionRx = watch::Receiver<Action>;
 
+/// The state of the application
 pub struct State {
     pub click_count: u32,
     last_tag_read: Option<u32>,
     pub loop_count: u32,
     pub has_camera: bool,
+    taking_picture: bool,
     pub pictures: Vec<Vec<u8>>,
 }
 
@@ -36,6 +38,7 @@ impl State {
             last_tag_read: None,
             loop_count: 0,
             has_camera: false,
+            taking_picture: false,
             pictures: vec![],
         }
     }
@@ -45,15 +48,42 @@ impl State {
     }
 }
 
+/// Events that happen from the outside world. These are items that would
+/// cause the state to be updated.
 pub enum Event {
+    /// Increment the Click Accumliator
     IncClick,
+    /// Increment the Loop Accumliator
     IncLoop,
+    /// Last Tag to be read
     ReadTag(u32),
+    /// Register a Camera or Not
     HasCamera(bool),
+    /// Add an image to the list of imasges
     AddImage(Vec<u8>),
+    /// External request to take an image with the camera
+    TakeImageRequest,
+    /// Event requesting everything shut down
+    Shutdown,
 }
 
-async fn reducer(event: Event, state: &Mutex<State>) {
+/// Actions are a response to the state being updated after an event.
+/// They tell other parts of the application to update based on a new state.
+/// Right now this is to take a picture or shutdown. In the future this can also
+/// ask lights to blink or a motor to turn.
+#[derive(Clone, Copy)]
+pub enum Action {
+    /// Default action when app is starting up
+    Startup,
+    /// Action to captue an image with the camera
+    TakePicture,
+    /// Action to shut down all tasks
+    Shutdown,
+}
+
+// Consumes the event along with a state.
+// Updates the state object and sends out actions to take.
+async fn reducer(event: Event, state: &Mutex<State>, action_tx: &ActionTx) {
     match event {
         Event::IncLoop => {
             state.lock().await.loop_count += 1;
@@ -64,21 +94,46 @@ async fn reducer(event: Event, state: &Mutex<State>) {
         Event::ReadTag(tag) => state.lock().await.last_tag_read = Some(tag),
         Event::HasCamera(camera) => {
             state.lock().await.has_camera = camera;
+        }        
+        Event::TakeImageRequest => {
+            let mut state = state.lock().await;            
+            if state.has_camera {
+                state.taking_picture = true;
+                if let Err(_err) = action_tx.broadcast(Action::TakePicture) {
+                    error!("Error sending take picture");
+                }
+            } else {
+                debug!("Image Taking request with no camera");
+            }
         }
         Event::AddImage(image) => {
             debug!("Saving image to memory");
-            state.lock().await.pictures.push(image);
+            let mut state = state.lock().await;
+            state.pictures.push(image);
+            state.taking_picture = false;
+        }
+        Event::Shutdown => {
+            if let Err(_err) = action_tx.broadcast(Action::Shutdown) {
+                error!("Error shutting down");
+            }
         }
     };
 }
 
+/// 
 pub fn reducer_task(
     state_handle: Arc<Mutex<State>>,
     mut rx: EventRx,
-    mut stop_rx: watch::Receiver<Action>,
+    mut action_tx: ActionTx,
 ) -> task::JoinHandle<()> {
     task::spawn(async move {
-        loop {
+        while let Some(event) = rx.recv().await {
+            reducer(event, &state_handle, &action_tx).await
+        }  
+        debug!("All Recievers dropped");
+        action_tx.closed().await;
+        debug!("All senders dropped. Quitting now");
+       /*  loop {
             select! {
                 event = rx.recv().fuse() => {
                     if let Some(event) = event {
@@ -90,13 +145,6 @@ pub fn reducer_task(
                     break
                 }
             }
-        }
+        } */
     })
-}
-
-#[derive(Clone, Copy)]
-pub enum Action {
-    Run,
-    TakePicture,
-    Shutdown,
 }
