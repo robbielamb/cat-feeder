@@ -2,10 +2,13 @@
   * Correct betterer headers
   * A CSS File
   * Custom logger for capturing logs
-  * Add Distance Sensor Reading (i2c). Must live on the same thread.
   * Don't blindly unwrap things. Handle the errors.
   * What is up with the pi zero?
   * Integrate the other build crap into the repository
+  * Configure the distance sensor
+  * Configure the motor
+  * Rename project
+  * Sanity in nameing the task functions
 
 
   ## Icon Url 
