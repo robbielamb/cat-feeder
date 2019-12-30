@@ -1,0 +1,3 @@
+[submodule "ads1015_adc"]
+	path = ads1015_adc
+	url = https://github.com/robbielamb/ads1015_adc

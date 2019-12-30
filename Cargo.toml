@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 askama = "0.8.0"
+ads1015_adc = "0.1"
 bytes = "0.5"
 futures-core = { version = "0.3", default-features = false }
 futures-channel = "0.3"
@@ -27,9 +28,11 @@ tokio-util = { version = "0.2.0", features = ["codec"], default-features = false
 url = "1.0"
 
 [workspace]
+members = ["ads1015_adc"]
 #members = ["mmal-sys", "rascam"]
 
 [patch.crates-io]
+ads1015_adc = { path= "./ads1015_adc" }
 #mmal-sys = { path="./mmal-sys" }
 #rascam = { path="./rascam" }
 

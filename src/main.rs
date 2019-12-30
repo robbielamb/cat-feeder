@@ -42,6 +42,9 @@ mod rfid_reader;
 mod camera;
 use camera::picture_task;
 
+mod distance;
+use distance::distance_task;
+
 mod state;
 use state::{reducer_task, ActionRx, ActionTx, Event, EventRx, EventTx, State};
 
@@ -79,6 +82,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let looping_task = looping_state(tx.clone(), action_rx.clone(), Arc::clone(&state));
 
         let rfid_reader_task = rfid_reader::rfid_reader(tx.clone(), action_rx.clone());
+
+        let distance_task = distance_task(action_rx.clone(), tx.clone());
 
         let button = gpios.get(20).unwrap().into_input_pulldown();
         let button_tx = tx.clone();
@@ -124,7 +129,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         });
 
         //let quit_listener_tx = tx.clone();
-        let quit_listener = task::spawn_local(async move {
+        let quit_listener = task::spawn(async move {
             debug!("Installing signal handler");
             // An infinite stream of hangup signals.
             let mut stream = signal(SignalKind::interrupt()).unwrap();
@@ -141,6 +146,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
         let _ret = join!(
             button_listener,
+            distance_task,
             looping_task,
             picture_task,
             quit_listener,
