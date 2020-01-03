@@ -1,5 +1,5 @@
 [package]
-name = "hyper-play"
+name = "cat-feeder"
 version = "0.1.0"
 authors = ["Robbie Lamb <lamb@eccentriclamb.com>"]
 edition = "2018"
@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 askama = "0.8.0"
-ads1015_adc = "0.1"
+ads1015_adc = "0.2"
 bytes = "0.5"
 futures-core = { version = "0.3", default-features = false }
 futures-channel = "0.3"
