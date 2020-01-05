@@ -34,16 +34,22 @@ pub fn picture_task(mut rx: ActionRx, state_tx: EventTx) -> task::JoinHandle<()>
             }
         };
         if let Some(mut camera) = camera_info {
-            while let Some(Action::TakePicture) = rx.recv().await {
-                debug!("Request for a picture");
-                let picture = camera.take_one_async().await;
-                match picture {
-                    Ok(pict) => {
-                        if let Err(err) = state_tx.send(Event::AddImage(pict)) {
-                            error!("Error saving picture: {}", err)
+            loop {
+                match rx.recv().await {
+                    Some(Action::TakePicture) => {
+                        debug!("Request for a picture");
+                        let picture = camera.take_one_async().await;
+                        match picture {
+                            Ok(pict) => {
+                                if let Err(err) = state_tx.send(Event::AddImage(pict)) {
+                                    error!("Error saving picture: {}", err)
+                                }
+                            }
+                            Err(err) => error!("Error taking picture: {}", err),
                         }
                     }
-                    Err(err) => error!("Error taking picture: {}", err),
+                    Some(Action::Shutdown) => break,
+                    _ => (),
                 }
             }
         }

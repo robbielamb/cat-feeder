@@ -7,7 +7,6 @@
   * Integrate the other build crap into the repository
   * Configure the distance sensor
   * Configure the motor
-  * Rename project
   * Sanity in nameing the task functions
 
 

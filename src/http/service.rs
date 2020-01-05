@@ -15,10 +15,7 @@ use log::{debug, error};
 use hyper::{Body, Method, Request, Response, Server};
 use tokio::sync::Mutex;
 
-
 use url::form_urlencoded;
-
-
 
 #[derive(Template)]
 #[template(path = "hello.html")]
@@ -56,7 +53,6 @@ pub async fn shutdown_listener(rx: ActionRx) -> () {
     }
     ()
 } */
-
 
 // The webserver task
 pub async fn http_response(
@@ -126,6 +122,7 @@ pub async fn http_response(
                 false => helpers::not_found(), // Should have a nice message about taking a picture or not
                 true => {
                     // Send message to take picture
+                    debug!("Requesting image be taken");
                     if let Err(err) = tx.send(Event::TakeImageRequest) {
                         error!("Error taking picture: {}", err);
                     };

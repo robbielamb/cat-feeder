@@ -1,8 +1,8 @@
 // Standard imports
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use std::net::{SocketAddr};
 
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Server};
@@ -117,7 +117,6 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             ()
         });
 
-
         //let quit_listener_tx = tx.clone();
         let quit_listener = task::spawn(async move {
             debug!("Installing signal handler");
@@ -158,9 +157,9 @@ fn looping_state(
     task::spawn(async move {
         loop {
             {
-                 if let Err(_err) = tx.send(Event::IncLoop) {
+                if let Err(_err) = tx.send(Event::IncLoop) {
                     error!("Error sending message");
-                }             
+                }
                 let state = state.lock().await;
                 info!("In the spawned loop {} times", state.loop_count);
             }
@@ -171,7 +170,7 @@ fn looping_state(
                     debug!("Shutting down looper");
                     break }
             }
-        };
+        }
         Ok(())
     })
 }
