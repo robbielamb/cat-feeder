@@ -30,6 +30,8 @@ use tokio::time::delay_for;
 // Local Code
 mod assets;
 
+mod config;
+
 mod result;
 use result::Result;
 

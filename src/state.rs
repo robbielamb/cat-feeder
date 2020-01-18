@@ -59,6 +59,8 @@ pub enum Event {
     AddImage(Vec<u8>),
     /// External request to take an image with the camera
     TakeImageRequest,
+    /// Request an image be deleted from the image list
+    DeleteImage(usize),
     /// Event requesting everything shut down
     Shutdown,
 }
@@ -107,6 +109,12 @@ async fn reducer(event: Event, state: &Mutex<State>, action_tx: &ActionTx) {
             let mut state = state.lock().await;
             state.pictures.push(image);
             state.taking_picture = false;
+        }
+        Event::DeleteImage(id) => {
+            let mut state = state.lock().await;
+            if state.pictures.len() < (id + 1) {
+                let _ = state.pictures.remove(id);
+            }
         }
         Event::Shutdown => {
             if let Err(_err) = action_tx.broadcast(Action::Shutdown) {
