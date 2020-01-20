@@ -20,6 +20,7 @@ pub type ActionRx = watch::Receiver<Action>;
 /// The state of the application
 pub struct State {
     pub click_count: u32,
+    distance: u16,
     last_tag_read: Option<u32>,
     pub loop_count: u32,
     pub has_camera: bool,
@@ -31,6 +32,7 @@ impl State {
     pub fn new() -> Self {
         State {
             click_count: 0,
+            distance: 0,
             last_tag_read: None,
             loop_count: 0,
             has_camera: false,
@@ -61,6 +63,12 @@ pub enum Event {
     TakeImageRequest,
     /// Request an image be deleted from the image list
     DeleteImage(usize),
+    /// Endering the configured distance threshold
+    EnterDistanceThreshold(u16),
+    /// Notification of the distance
+    Distance(u16),
+    /// Exiting the configured distance threshold
+    ExitDistanceThreshold(u16),
     /// Event requesting everything shut down
     Shutdown,
 }
@@ -107,6 +115,11 @@ async fn reducer(event: Event, state: &Mutex<State>, action_tx: &ActionTx) {
         Event::AddImage(image) => {
             debug!("Saving image to memory");
             let mut state = state.lock().await;
+            let picture_count = state.pictures.len();
+            if picture_count > 10 {
+                let _ = state.pictures.remove(picture_count - 1);
+            }
+
             state.pictures.push(image);
             state.taking_picture = false;
         }
@@ -115,6 +128,18 @@ async fn reducer(event: Event, state: &Mutex<State>, action_tx: &ActionTx) {
             if state.pictures.len() < (id + 1) {
                 let _ = state.pictures.remove(id);
             }
+        }
+        Event::EnterDistanceThreshold(distance) => {
+            let mut state = state.lock().await;
+            state.distance = distance;
+        }
+        Event::Distance(distance) => {
+            let mut state = state.lock().await;
+            state.distance = distance;
+        }
+        Event::ExitDistanceThreshold(distance) => {
+            let mut state = state.lock().await;
+            state.distance = distance;
         }
         Event::Shutdown => {
             if let Err(_err) = action_tx.broadcast(Action::Shutdown) {

@@ -5,7 +5,7 @@ listen_port = "0.0.0.0:1337"
 valid_ids = ["123","0008682139"]
 
 [distance]
-near_value = 1000
-far_value = 2000
+near_value = 2000
+far_value = 1000
 alert_pin = 17 # GPIO pin used to alert when a conversion is done
 interval = 250 # Time to repeat in milli seconds.

@@ -8,7 +8,7 @@ use log::{debug, error, warn};
 use tokio::task;
 use tokio::time::delay_for;
 
-pub fn picture_task(mut rx: ActionRx, state_tx: EventTx) -> task::JoinHandle<()> {
+pub fn create_picture_task(mut rx: ActionRx, event_tx: EventTx) -> task::JoinHandle<()> {
     task::spawn_local(async move {
         debug!("Starting picture task");
         let mut camera;
@@ -18,7 +18,7 @@ pub fn picture_task(mut rx: ActionRx, state_tx: EventTx) -> task::JoinHandle<()>
                     warn!("No cameras found on device");
                     None
                 } else {
-                    if let Err(err) = state_tx.send(Event::HasCamera(true)) {
+                    if let Err(err) = event_tx.send(Event::HasCamera(true)) {
                         error!("Error sending click event: {}", err)
                     }
                     debug!("We have a camera");
@@ -41,7 +41,7 @@ pub fn picture_task(mut rx: ActionRx, state_tx: EventTx) -> task::JoinHandle<()>
                         let picture = camera.take_one_async().await;
                         match picture {
                             Ok(pict) => {
-                                if let Err(err) = state_tx.send(Event::AddImage(pict)) {
+                                if let Err(err) = event_tx.send(Event::AddImage(pict)) {
                                     error!("Error saving picture: {}", err)
                                 }
                             }

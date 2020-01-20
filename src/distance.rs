@@ -1,4 +1,4 @@
-use crate::config::{Config, Distance};
+use crate::config::Distance;
 use crate::state::{Action, ActionRx, Event, EventTx};
 use crate::utils;
 
@@ -15,6 +15,7 @@ use tokio::sync::watch;
 use tokio::task;
 use tokio::time::delay_for;
 
+use crate::state::Event::EnterDistanceThreshold;
 use std::time::Duration;
 
 #[derive(Clone, Copy, Debug)]
@@ -23,10 +24,10 @@ enum Conversion {
     NotReady,
 }
 
-pub fn distance_task(
+pub fn create_distance_task(
     mut rx: ActionRx,
     distance_config: Distance,
-    _event_tx: EventTx,
+    mut event_tx: EventTx,
 ) -> task::JoinHandle<()> {
     task::spawn_local(async move {
         let i2c = I2c::new().expect("Unable to open I2C bus.");
@@ -59,14 +60,16 @@ pub fn distance_task(
         let mut pin_watcher = pin_watcher.fuse();
         loop {
             select! {
-                foo = pin_watcher => {},
-                conversion_event = recieve_conversion_ready.recv().fuse() => {
+                // Just to run the pin watcher. It will quit on it's own.
+                _ = pin_watcher => {},
+                // Request when the conversion pin triggers
+                _conversion_event = recieve_conversion_ready.recv().fuse() => {
                     let value = adc.read_conversion().unwrap();
-                    debug!("Distance Value {}", value);
-
+                    evaluate_value(value, &distance_config, &mut event_tx);
+                    // Reset the delay for when to trigger the pin again
                     delay = delay_for(Duration::from_millis(distance_config.interval)).fuse();
-                    // Do something with the value now
                 }
+                // Request the pin be read async.
                 _ = delay => {
                     adc.request_read(Pin::P0).unwrap();
                 }
@@ -76,7 +79,7 @@ pub fn distance_task(
                             debug!("Shut down distance task");
                             break;
                         }
-                        Some(Action::Startup) => debug!("Task in startup mode"),
+                        Some(Action::Startup) => debug!("Distance Task in startup mode"),
                         _ => {
                          // Nothing
                         }
@@ -85,4 +88,15 @@ pub fn distance_task(
             }
         }
     })
+}
+
+// Decide what to do with the value read from the ADC given the config. Possibly send
+// and event.
+fn evaluate_value(value: u16, distance_config: &Distance, event_tx: &mut EventTx) {
+    info!("Distance value: {}", value);
+    if value >= distance_config.far_value {
+        if let Err(err) = event_tx.send(Event::EnterDistanceThreshold(value)) {
+            error!("Error sending event: {}", err);
+        }
+    }
 }

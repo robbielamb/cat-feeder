@@ -33,10 +33,10 @@ mod assets;
 mod config;
 
 mod camera;
-use camera::picture_task;
+use camera::create_picture_task;
 
 mod distance;
-use distance::distance_task;
+use distance::create_distance_task;
 
 mod result;
 use result::Result;
@@ -74,13 +74,13 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let _ = local.block_on(&mut rt, async move {
         let reducer_task = reducer_task(Arc::clone(&state), rx, action_tx);
 
-        let picture_task = picture_task(action_rx.clone(), tx.clone());
+        let picture_task = create_picture_task(action_rx.clone(), tx.clone());
 
         let looping_task = looping_state(tx.clone(), action_rx.clone(), Arc::clone(&state));
 
         let rfid_reader_task = rfid_reader::rfid_reader(tx.clone(), action_rx.clone());
 
-        let distance_task = distance_task(action_rx.clone(), config.distance, tx.clone());
+        let distance_task = create_distance_task(action_rx.clone(), config.distance, tx.clone());
 
         let button = gpios.get(20).unwrap().into_input_pulldown();
         let button_tx = tx.clone();
