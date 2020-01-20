@@ -56,7 +56,7 @@ pub fn get_png(name: &str) -> Result<Response<Body>> {
     }
 }
 
-pub fn get_ico(name: &str) -> Result<Response<Body>> {
+/* pub fn get_ico(name: &str) -> Result<Response<Body>> {
     if let Some(img) = Image::get(name) {
         let res = Response::builder()
             .header("Content-Type", "image/x-icon")
@@ -66,7 +66,7 @@ pub fn get_ico(name: &str) -> Result<Response<Body>> {
         error!("Image not found: {}", "name");
         not_found()
     }
-}
+} */
 
 /// Returns the vec<u8> as an an image.
 pub fn get_camera_image(image: Vec<u8>) -> Result<Response<Body>> {

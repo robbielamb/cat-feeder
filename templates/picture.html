@@ -1,0 +1,22 @@
+{% extends "layout.html" %}
+
+{% block title %}Image View{% endblock %}
+
+{% block content %}
+<img src="/images/{{ image_id }}" />
+<br>
+
+<p>
+{% if image_id > 0 %}
+    <a href="/picture/{{ image_id - 1 }}">Privious Image {{ image_id - 1 }}</a>
+{% endif %}
+
+{% if image_id < total_images-1 %}
+    <a href="/picture/{{ image_id + 1 }}">Next Image {{ image_id + 1 }}</a>
+{% endif %}
+</p>
+
+<form action="/delete_image/{{ image_id }}" method="post">
+    <button name="delete_picture" value="{{ image_id }}">Delete Image</button>
+</form>
+{% endblock %}

@@ -12,7 +12,7 @@ use askama::Template;
 use log::{debug, error};
 
 //use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Method, Request, Response, Server};
+use hyper::{Body, Method, Request, Response};
 use tokio::sync::Mutex;
 
 use url::form_urlencoded;
@@ -23,36 +23,17 @@ struct HelloTemplate<'a> {
     name: &'a str,
     click_count: &'a u32,
     loop_count: &'a u32,
-    picture_count: &'a usize,
+    picture_count: usize,
     last_tag: u32,
+    last_distance: u16,
 }
 
-/// My get server function
-/* pub fn get_server(addr: SocketAddr, state: Arc<Mutex<State>>, tx: EventTx, action_rx: ActionRx) -> Server<AddrIncoming, MakeServiceFn<|…| -> Result<ServiceFn<|Request<Body>| -> impl Future<Output = Result<Response<Body>, Error>>, Body>, Error>>> {
-
-    let make_service = make_service_fn(move |_| {
-        async move {
-            Ok::<_, hyper::Error>(service_fn(move |request: Request<Body>| {
-                test_response(request, state, tx)
-            }))
-        }
-    });
-
-    let service = Server::bind(&addr).serve(make_service);
-
-    service
-
+#[derive(Template)]
+#[template(path = "picture.html")]
+struct PictureTemplate {
+    image_id: usize,
+    total_images: usize,
 }
-
-pub async fn shutdown_listener(rx: ActionRx) -> () {
-    loop {
-        if let Some(Action::Shutdown) = rx.recv().await {
-            debug!("HTTP Recieved quit event");
-            break;
-        }
-    }
-    ()
-} */
 
 // The webserver task
 pub async fn http_response(
@@ -82,8 +63,9 @@ pub async fn http_response(
                 name: "hey there",
                 click_count: &state.click_count,
                 loop_count: &state.loop_count,
-                picture_count: &state.pictures.len(),
+                picture_count: state.pictures.len(),
                 last_tag: state.last_tag_read().unwrap_or(0),
+                last_distance: state.distance,
             };
             let template = hello.render()?;
             helpers::render_template(template)
@@ -126,43 +108,55 @@ pub async fn http_response(
                     if let Err(err) = tx.send(Event::TakeImageRequest) {
                         error!("Error taking picture: {}", err);
                     };
-                    helpers::redirect_to("/latest_picture".to_string())
+                    helpers::redirect_to("/".to_string())
                 }
             }
         }
-        (&Method::GET, &["latest_picture"]) => {
-            let picts = &state.lock().await.pictures;
-            if picts.len() < 1 {
-                helpers::not_found()
-            } else {
-                let some_pict = &picts[picts.len() - 1];
-                helpers::get_camera_image(some_pict.to_vec())
-            }
-        }
         (&Method::GET, &["picture", numb]) => match numb.parse::<usize>() {
-            Ok(i) => {
+            Ok(image_id) => {
                 let picts = &state.lock().await.pictures;
-                if picts.len() > 0 && i < picts.len() {
-                    let some_pict = &picts[i];
-                    helpers::get_camera_image(some_pict.to_vec())
+                if picts.len() > 0 && image_id < picts.len() {
+                    let picture_template = PictureTemplate {
+                        image_id,
+                        total_images: picts.len(),
+                    };
+                    let template = picture_template.render()?;
+                    helpers::render_template(template)
                 } else {
                     helpers::not_found()
                 }
             }
             Err(_e) => helpers::not_found(),
         },
-        (&Method::GET, &["hello", x]) => {
-            let state = state.lock().await;
-            let hello = HelloTemplate {
-                name: x,
-                click_count: &state.click_count,
-                loop_count: &state.loop_count,
-                picture_count: &state.pictures.len(),
-                last_tag: state.last_tag_read().unwrap_or(0),
-            };
-            let template = hello.render()?;
-            helpers::render_template(template)
+        (&Method::GET, &["images", image_id]) => {
+            debug!("Requesting image {}", image_id);
+            match image_id.parse::<usize>() {
+                Ok(image_id) => {
+                    let picts = &state.lock().await.pictures;
+                    if picts.len() > 0 && image_id < picts.len() {
+                        let some_pict = &picts[image_id];
+                        helpers::get_camera_image(some_pict.to_vec())
+                    } else {
+                        helpers::not_found()
+                    }
+                }
+                Err(_e) => helpers::not_found(),
+            }
         }
+        (&Method::POST, &["delete_image", image_id]) => match image_id.parse::<usize>() {
+            Ok(image_id) => {
+                let picts = &state.lock().await.pictures;
+                if picts.len() > 0 && image_id < picts.len() {
+                    if let Err(err) = tx.send(Event::DeleteImage(image_id)) {
+                        error!("Error deleting picture: {}", err);
+                    };
+                    helpers::redirect_to("/".to_string())
+                } else {
+                    helpers::unprocessable_entry()
+                }
+            }
+            Err(_e) => helpers::unprocessable_entry(),
+        },
 
         _ => {
             debug!("Not Found");

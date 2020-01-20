@@ -23,6 +23,12 @@ pub fn create_picture_task(mut rx: ActionRx, event_tx: EventTx) -> task::JoinHan
                     }
                     debug!("We have a camera");
                     camera = rascam::SimpleCamera::new(info.cameras[0].clone()).unwrap();
+                    let settings = rascam::CameraSettings {
+                        width: 1920,
+                        height: 1080,
+                        ..rascam::CameraSettings::default()
+                    };
+                    camera.configure(settings);
                     camera.activate().unwrap();
                     delay_for(Duration::from_millis(2000)).await;
                     Some(camera)

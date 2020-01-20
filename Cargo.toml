@@ -41,3 +41,4 @@ ads1015_adc = { path= "./ads1015_adc" }
 
 [profile.release]
 lto = true # enable link time optomizations 
+codegen-units = 1

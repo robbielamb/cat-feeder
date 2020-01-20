@@ -15,7 +15,6 @@ use tokio::sync::watch;
 use tokio::task;
 use tokio::time::delay_for;
 
-use crate::state::Event::EnterDistanceThreshold;
 use std::time::Duration;
 
 #[derive(Clone, Copy, Debug)]
@@ -56,7 +55,7 @@ pub fn create_distance_task(
 
         let mut delay = delay_for(Duration::from_millis(distance_config.interval)).fuse();
 
-        //pin_mut!(pin_watcher);
+        let mut in_threshold: bool = false;
         let mut pin_watcher = pin_watcher.fuse();
         loop {
             select! {
@@ -65,7 +64,7 @@ pub fn create_distance_task(
                 // Request when the conversion pin triggers
                 _conversion_event = recieve_conversion_ready.recv().fuse() => {
                     let value = adc.read_conversion().unwrap();
-                    evaluate_value(value, &distance_config, &mut event_tx);
+                    evaluate_value(value, &distance_config, &mut event_tx, &mut in_threshold);
                     // Reset the delay for when to trigger the pin again
                     delay = delay_for(Duration::from_millis(distance_config.interval)).fuse();
                 }
@@ -92,10 +91,25 @@ pub fn create_distance_task(
 
 // Decide what to do with the value read from the ADC given the config. Possibly send
 // and event.
-fn evaluate_value(value: u16, distance_config: &Distance, event_tx: &mut EventTx) {
+fn evaluate_value(
+    value: u16,
+    distance_config: &Distance,
+    event_tx: &mut EventTx,
+    in_threshold: &mut bool,
+) {
     info!("Distance value: {}", value);
-    if value >= distance_config.far_value {
+    if value >= distance_config.enter_threshold && *in_threshold == false {
+        *in_threshold = true;
         if let Err(err) = event_tx.send(Event::EnterDistanceThreshold(value)) {
+            error!("Error sending event: {}", err);
+        }
+    } else if value < distance_config.exit_threshold && *in_threshold == true {
+        *in_threshold = false;
+        if let Err(err) = event_tx.send(Event::ExitDistanceThreshold(value)) {
+            error!("Error sending event: {}", err);
+        }
+    } else {
+        if let Err(err) = event_tx.send(Event::Distance(value)) {
             error!("Error sending event: {}", err);
         }
     }

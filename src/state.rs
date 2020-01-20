@@ -5,6 +5,7 @@ use log::{debug, error};
 use tokio::sync::{mpsc, watch, Mutex};
 use tokio::task;
 
+
 /// Shorthand for the transmit half of the event message channel.
 pub type EventTx = mpsc::UnboundedSender<Event>;
 
@@ -20,7 +21,8 @@ pub type ActionRx = watch::Receiver<Action>;
 /// The state of the application
 pub struct State {
     pub click_count: u32,
-    distance: u16,
+    pub distance: u16,
+    in_threshold: bool,
     last_tag_read: Option<u32>,
     pub loop_count: u32,
     pub has_camera: bool,
@@ -33,6 +35,7 @@ impl State {
         State {
             click_count: 0,
             distance: 0,
+            in_threshold: false,
             last_tag_read: None,
             loop_count: 0,
             has_camera: false,
@@ -103,7 +106,7 @@ async fn reducer(event: Event, state: &Mutex<State>, action_tx: &ActionTx) {
         }
         Event::TakeImageRequest => {
             let mut state = state.lock().await;
-            if state.has_camera {
+            if state.has_camera && !state.taking_picture {
                 state.taking_picture = true;
                 if let Err(_err) = action_tx.broadcast(Action::TakePicture) {
                     error!("Error sending take picture");
@@ -116,7 +119,7 @@ async fn reducer(event: Event, state: &Mutex<State>, action_tx: &ActionTx) {
             debug!("Saving image to memory");
             let mut state = state.lock().await;
             let picture_count = state.pictures.len();
-            if picture_count > 10 {
+            if picture_count >= 40 {
                 let _ = state.pictures.remove(picture_count - 1);
             }
 
@@ -125,13 +128,20 @@ async fn reducer(event: Event, state: &Mutex<State>, action_tx: &ActionTx) {
         }
         Event::DeleteImage(id) => {
             let mut state = state.lock().await;
-            if state.pictures.len() < (id + 1) {
+            if state.pictures.len() > (id) {
                 let _ = state.pictures.remove(id);
             }
         }
         Event::EnterDistanceThreshold(distance) => {
             let mut state = state.lock().await;
             state.distance = distance;
+            state.in_threshold = true;
+            if state.has_camera && !state.taking_picture {
+                state.taking_picture = true;
+                if let Err(_err) = action_tx.broadcast(Action::TakePicture) {
+                    error!("Error sending take picture");
+                }
+            }
         }
         Event::Distance(distance) => {
             let mut state = state.lock().await;
@@ -140,6 +150,13 @@ async fn reducer(event: Event, state: &Mutex<State>, action_tx: &ActionTx) {
         Event::ExitDistanceThreshold(distance) => {
             let mut state = state.lock().await;
             state.distance = distance;
+            state.in_threshold = false;
+            if state.has_camera && !state.taking_picture {
+                state.taking_picture = true;
+                if let Err(_err) = action_tx.broadcast(Action::TakePicture) {
+                    error!("Error sending take picture");
+                }
+            }
         }
         Event::Shutdown => {
             if let Err(_err) = action_tx.broadcast(Action::Shutdown) {
@@ -153,7 +170,7 @@ async fn reducer(event: Event, state: &Mutex<State>, action_tx: &ActionTx) {
 pub fn reducer_task(
     state_handle: Arc<Mutex<State>>,
     mut rx: EventRx,
-    mut action_tx: ActionTx,
+    mut action_tx: ActionTx,   
 ) -> task::JoinHandle<()> {
     task::spawn(async move {
         // rx.recv() returns None when all TXs are shutdown

@@ -5,7 +5,12 @@ listen_port = "0.0.0.0:1337"
 valid_ids = ["123","0008682139"]
 
 [distance]
-near_value = 2000
-far_value = 1000
+enter_threshold = 1000
+exit_threshold = 800
 alert_pin = 17 # GPIO pin used to alert when a conversion is done
 interval = 250 # Time to repeat in milli seconds.
+
+[images]
+width = 1920
+height = 1080
+count = 30

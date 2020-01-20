@@ -1,5 +1,5 @@
 // Standard imports
-
+#![recursion_limit = "256"]
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -16,7 +16,7 @@ use futures::{
 
 use log::{debug, error, info};
 
-use rppal::gpio::{Gpio, InputPin, Level, Trigger};
+use rppal::gpio::{Gpio, Level, Trigger};
 
 /* use tokio::fs::File;
 use tokio::io::AsyncReadExt;

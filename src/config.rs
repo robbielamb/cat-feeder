@@ -6,10 +6,16 @@ use toml;
 #[derive(Deserialize, Serialize)]
 pub struct Config {
     pub title: String,
-    pub listen_port: String,
-    pub port: Option<u16>,
+    pub listen_port: String,  
+    pub images: Images, 
     pub rfid: Rfid,
     pub distance: Distance,
+}
+#[derive(Deserialize, Serialize)]
+pub struct Images {
+    pub count: usize,
+    width: u16,
+    height: u16
 }
 
 #[derive(Deserialize, Serialize)]
@@ -19,8 +25,8 @@ pub struct Rfid {
 
 #[derive(Deserialize, Serialize)]
 pub struct Distance {
-    pub near_value: u16,
-    pub far_value: u16,
+    pub enter_threshold: u16,
+    pub exit_threshold: u16,
     pub alert_pin: u8,
     pub interval: u64,
 }
