@@ -7,7 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-askama = "0.8.0"
+askama = "0.9.0"
 ads1015_adc = "0.2"
 bytes = "0.5"
 futures-core = { version = "0.3", default-features = false }

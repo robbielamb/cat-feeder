@@ -32,19 +32,21 @@ mod assets;
 
 mod config;
 
-mod result;
-use result::Result;
-
-mod rfid_reader;
-
 mod camera;
 use camera::picture_task;
 
 mod distance;
 use distance::distance_task;
 
+mod result;
+use result::Result;
+
+mod rfid_reader;
+
 mod state;
 use state::{reducer_task, ActionRx, ActionTx, Event, EventRx, EventTx, State};
+
+mod utils;
 
 mod http;
 use crate::http::service;
@@ -52,7 +54,11 @@ use crate::http::service;
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
 
-    let addr: SocketAddr = "0.0.0.0:1337".parse()?;
+    let config = config::read_config();
+
+    let addr: SocketAddr = config.listen_port.parse()?;
+
+    //let addr: SocketAddr = "0.0.0.0:1337".parse()?;
 
     let mut rt = Runtime::new()?;
     let gpios = Gpio::new()?;
@@ -74,22 +80,23 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
         let rfid_reader_task = rfid_reader::rfid_reader(tx.clone(), action_rx.clone());
 
-        let distance_task = distance_task(action_rx.clone(), tx.clone());
+        let distance_task = distance_task(action_rx.clone(), config.distance, tx.clone());
 
         let button = gpios.get(20).unwrap().into_input_pulldown();
         let button_tx = tx.clone();
-        let button_listener = watch_pin(button, action_rx.clone(), move |i| match i {
-            Level::High => {
-                info!("Caught a highm edge here");
-                if let Err(err) = button_tx.send(Event::IncClick) {
-                    error!("Error sending click: {}", err)
+        let button_listener =
+            utils::watch_pin(button, Trigger::Both, action_rx.clone(), move |i| match i {
+                Level::High => {
+                    info!("Caught a high edge here");
+                    if let Err(err) = button_tx.send(Event::IncClick) {
+                        error!("Error sending click: {}", err)
+                    }
                 }
-            }
-            Level::Low => {
-                info!("Caught a low edge here");
-                ()
-            }
-        });
+                Level::Low => {
+                    info!("Caught a low edge here");
+                    ()
+                }
+            });
 
         let service_tx = tx.clone();
         let clone_state = Arc::clone(&state);
@@ -150,7 +157,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// A simple task that increments a counter ever 5 seconds
+/// A simple task that increments a counter ever 5 seconds
 fn looping_state(
     tx: EventTx,
     mut stop_rx: watch::Receiver<state::Action>,
@@ -174,23 +181,5 @@ fn looping_state(
             }
         }
         Ok(())
-    })
-}
-
-// First stab at watching GPIO Events
-// The async starts a new thread, so not ideal, but this does seem to work.
-pub fn watch_pin<C>(mut pin: InputPin, mut action_rx: ActionRx, response: C) -> task::JoinHandle<()>
-where
-    C: FnMut(Level) + Send + 'static,
-{
-    task::spawn(async move {
-        let _ = pin.set_async_interrupt(Trigger::Both, response);
-
-        loop {
-            if let Some(state::Action::Shutdown) = action_rx.recv().await {
-                debug!("Shutting down Pin Task");
-                break;
-            }
-        }
     })
 }

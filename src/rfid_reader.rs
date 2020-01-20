@@ -64,8 +64,6 @@ impl Decoder for RFIDCodec {
             let tag_data: &[u8] = &my_slice[3..11];
             let checksum_data: &[u8] = &my_slice[11..13];
 
-            //let checksum= str::from_utf8(&my_slice[11..13]).map(|x| u16::from_str_radix(x, 16)).unwrap().unwrap();
-
             let checksum_str = checksum_data
                 .into_iter()
                 .map(|c| char::from(*c))
@@ -81,12 +79,16 @@ impl Decoder for RFIDCodec {
                 my_slice
             );
 
-            let comupted_checksum = compute_checksum(msg_data).unwrap();
+            let computed_checksum = compute_checksum(msg_data).unwrap();
             trace!(
                 "Computed checksum {}, HEX: {:X?}",
-                comupted_checksum,
-                comupted_checksum
+                computed_checksum,
+                computed_checksum
             );
+
+            if checksum != computed_checksum {
+                return Err(io::Error::new(io::ErrorKind::Other, "Checksum missmatch"));
+            }
 
             let tag_str = tag_data
                 .into_iter()
@@ -97,12 +99,6 @@ impl Decoder for RFIDCodec {
             trace!("Tag: {:?} tag_str: {:?}", tag, tag_str);
 
             return Ok(Some(tag));
-
-        /* return match str::from_utf8(&my_slice[3..11]) {
-            Ok(s) => Ok(Some(s.to_string())),
-
-            Err(_) => Err(io::Error::new(io::ErrorKind::Other, "Invalid String")),
-        }; */
         } else {
             // The first byte wasn't a 2. Consume the buffer upto the 2 we found
             return Err(consume_bytes(src, start_pos));
@@ -110,6 +106,7 @@ impl Decoder for RFIDCodec {
     }
 }
 
+/// Computes the checksum from the given bytes. Must be length 10
 fn compute_checksum(s: &[u8]) -> Option<u16> {
     if s.len() != 10 {
         return None;
@@ -176,7 +173,7 @@ pub fn rfid_reader(tx: EventTx, mut stop_rx: watch::Receiver<Action>) -> task::J
                 some_id = reader.next().fuse() => {
                     match some_id {
                         Some(line) => {
-                            let line = line.expect("Failet to read");
+                            let line = line.expect("Failed to read");
                             if let Err(err) = tx.send(Event::ReadTag(line)) {
                                 error!("Error updating last read tag: {}", err);
                             }
@@ -194,7 +191,3 @@ pub fn rfid_reader(tx: EventTx, mut stop_rx: watch::Receiver<Action>) -> task::J
         debug!("exiting");
     })
 }
-
-/*  async fn get_next(reader: &mut Framed<tokio_serial::Serial, RFIDCodec>) -> Option<Result<u32, std::io::Error>> {
-    reader.next().await
-} */
