@@ -1,0 +1,33 @@
+[package]
+name = "rascam"
+version = "0.0.2"
+authors = ["Peter Sutherland <pedrosland+rascam@gmail.com>"]
+description = "Library for taking photos and videos with the Raspberry Pi camera"
+repository = "https://github.com/pedrosland/rascam"
+documentation = "https://pedrosland.github.io/rascam/"
+readme = "README.md"
+license = "MIT"
+categories = [ "hardware-support" ]
+keywords = [ "camera", "raspberry", "pi", "rpi" ]
+exclude = [ "ci/*" ]
+build = "build.rs"
+edition = "2018"
+
+[dependencies]
+mmal-sys = "0.1.0-3"
+libc = "0.2"
+parking_lot = "0.10"
+scopeguard = "1.0"
+futures = "0.3"
+
+[dev-dependencies]
+tokio = { version = "0.2", features = ["full"] }
+
+[features]
+default = []
+
+# Enable this feature to enable some print statements for debugging.
+debug = []
+
+[package.metadata.docs.rs]
+default-target = "armv7-unknown-linux-gnueabihf"
