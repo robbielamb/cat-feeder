@@ -2,12 +2,11 @@
   * Correct betterer headers
   * A CSS File
   * Custom logger for capturing logs
-  * Don't blindly unwrap things. Handle the errors.
-  * Use the checksum from the RFID reader
-  * Configure the distance sensor
+  * Don't blindly unwrap things. Handle the errors. 
   * Configure the motor
   * Sanity in nameing the task functions
-  * TOML Config
+  * Include rascam and mmal-sys as git-submodules in the workspace
+ 
 
   ## Icon Url 
   [Cat Icon Origin](https://www.iconfinder.com/icons/3204662/animal_cat_domestic_pet_wild_icon)

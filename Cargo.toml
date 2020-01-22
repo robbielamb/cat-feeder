@@ -18,8 +18,8 @@ http = "^0.2.0"
 hyper = "^0.13.1"
 log = "0.4"
 pretty_env_logger = "0.3.1"
-#rascam = "0.0.2"
-rascam = { git = "https://github.com/pedrosland/rascam" }
+rascam = "0.0.2"
+#rascam = { git = "https://github.com/pedrosland/rascam" }
 rust-embed = { version = "^5.2.0", features = ["debug-embed"] }
 rppal = "0.11"
 serde = "1.0"
@@ -31,13 +31,13 @@ toml = "0.5"
 url = "1.0"
 
 [workspace]
-members = ["ads1015_adc"]
-#members = ["mmal-sys", "rascam"]
+#members = ["ads1015_adc"]
+members = ["ads1015_adc", "mmal-sys", "rascam"]
 
 [patch.crates-io]
 ads1015_adc = { path= "./ads1015_adc" }
-#mmal-sys = { path="./mmal-sys" }
-#rascam = { path="./rascam" }
+mmal-sys = { path="./mmal-sys" }
+rascam = { path="./rascam" }
 
 [profile.release]
 lto = true # enable link time optomizations 
