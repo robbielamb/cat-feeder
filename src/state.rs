@@ -119,8 +119,8 @@ async fn reducer(event: Event, state: &Mutex<State>, action_tx: &ActionTx) {
             debug!("Saving image to memory");
             let mut state = state.lock().await;
             let picture_count = state.pictures.len();
-            if picture_count >= 40 {
-                let _ = state.pictures.remove(picture_count - 1);
+            if picture_count >= 80 {
+                let _ = state.pictures.remove(0);
             }
 
             state.pictures.push(image);

@@ -32,11 +32,11 @@ url = "1.0"
 
 [workspace]
 #members = ["ads1015_adc"]
-members = ["ads1015_adc", "mmal-sys", "rascam"]
+members = ["ads1015_adc", "rascam"]
 
 [patch.crates-io]
 ads1015_adc = { path= "./ads1015_adc" }
-mmal-sys = { path="./mmal-sys" }
+#mmal-sys = { path="./mmal-sys" }
 rascam = { path="./rascam" }
 
 [profile.release]
