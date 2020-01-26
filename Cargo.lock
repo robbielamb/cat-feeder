@@ -23,6 +23,7 @@ dependencies = [
 name = "ads1015_adc"
 version = "0.2.0"
 dependencies = [
+ "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "rppal 0.11.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "simple-signal 1.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
