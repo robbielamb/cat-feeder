@@ -13,9 +13,7 @@ use rppal::gpio::{Gpio, Trigger};
 use rppal::i2c::I2c;
 use tokio::sync::watch;
 use tokio::task;
-use tokio::time::delay_for;
-
-use std::time::Duration;
+use tokio::time::{delay_for, Duration};
 
 #[derive(Clone, Copy, Debug)]
 enum Conversion {

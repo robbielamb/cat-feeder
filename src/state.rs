@@ -5,7 +5,6 @@ use log::{debug, error};
 use tokio::sync::{mpsc, watch, Mutex};
 use tokio::task;
 
-
 /// Shorthand for the transmit half of the event message channel.
 pub type EventTx = mpsc::UnboundedSender<Event>;
 
@@ -170,7 +169,7 @@ async fn reducer(event: Event, state: &Mutex<State>, action_tx: &ActionTx) {
 pub fn reducer_task(
     state_handle: Arc<Mutex<State>>,
     mut rx: EventRx,
-    mut action_tx: ActionTx,   
+    mut action_tx: ActionTx,
 ) -> task::JoinHandle<()> {
     task::spawn(async move {
         // rx.recv() returns None when all TXs are shutdown

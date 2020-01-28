@@ -356,7 +356,6 @@ impl SeriousCamera {
 
     pub fn set_camera_awb(&mut self) -> Result<(), CameraError> {
         unsafe {
-
             let mut cfg: ffi::MMAL_PARAMETER_AWBMODE_T = mem::zeroed();
             cfg.hdr.id = ffi::MMAL_PARAMETER_AWB_MODE as u32;
             cfg.hdr.size = mem::size_of::<ffi::MMAL_PARAMETER_AWBMODE_T>() as u32;
@@ -365,12 +364,8 @@ impl SeriousCamera {
             let status = ffi::mmal_port_parameter_set(self.camera.as_ref().control, &cfg.hdr);
             match status {
                 MMAL_STATUS_T::MMAL_SUCCESS => Ok(()),
-                s => Err(MmalError::with_status(
-                    "unable to set AWB".to_owned(),
-                    s,
-                ).into()),
+                s => Err(MmalError::with_status("unable to set AWB".to_owned(), s).into()),
             }
-
         }
     }
 

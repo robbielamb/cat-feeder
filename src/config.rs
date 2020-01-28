@@ -6,8 +6,8 @@ use toml;
 #[derive(Deserialize, Serialize)]
 pub struct Config {
     pub title: String,
-    pub listen_port: String,  
-    pub images: Images, 
+    pub listen_port: String,
+    pub images: Images,
     pub rfid: Rfid,
     pub distance: Distance,
 }
@@ -15,7 +15,7 @@ pub struct Config {
 pub struct Images {
     pub count: usize,
     width: u16,
-    height: u16
+    height: u16,
 }
 
 #[derive(Deserialize, Serialize)]
