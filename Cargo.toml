@@ -17,6 +17,7 @@ futures-util = { version = "0.3", default-features = false }
 http = "^0.2.0"
 hyper = "^0.13.1"
 log = "0.4"
+pca9685_pwc = "0.1"
 pretty_env_logger = "0.3.1"
 rascam = "0.0.2"
 #rascam = { git = "https://github.com/pedrosland/rascam" }
@@ -32,10 +33,11 @@ url = "1.0"
 
 [workspace]
 #members = ["ads1015_adc"]
-members = ["ads1015_adc", "rascam"]
+members = ["ads1015_adc", "pca9685_pwc", "rascam"]
 
 [patch.crates-io]
 ads1015_adc = { path= "./ads1015_adc" }
+pca9685_pwc = { path="./pca9685_pwc" }
 #mmal-sys = { path="./mmal-sys" }
 rascam = { path="./rascam" }
 
