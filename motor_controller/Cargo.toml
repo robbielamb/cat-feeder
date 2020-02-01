@@ -1,5 +1,5 @@
 [package]
-name = "pca9685_pwc"
+name = "motor_controller"
 version = "0.1.0"
 authors = ["Robbie Lamb <lamb@eccentriclamb.com>"]
 edition = "2018"

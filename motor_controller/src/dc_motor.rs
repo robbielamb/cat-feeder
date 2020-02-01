@@ -11,7 +11,7 @@ pub const MOTOR2: MotorAddrs = (11, 12); // disable 13?
 pub const MOTOR3: MotorAddrs = (3, 4); // disable 2?
 pub const MOTOR4: MotorAddrs = (5, 6); // disable 7?
 
-struct DCMotor {
+pub struct DCMotor {
     pub pca: PCA9685,
 }
 
